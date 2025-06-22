@@ -5,6 +5,7 @@ namespace ServerManager\LaravelServerManager\Tests\Feature;
 use ServerManager\LaravelServerManager\Tests\TestCase;
 use ServerManager\LaravelServerManager\Services\SshService;
 use ServerManager\LaravelServerManager\Services\MonitoringService;
+use ServerManager\LaravelServerManager\Models\Server;
 use Mockery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -42,6 +43,14 @@ class ServerControllerTest extends TestCase
 
     public function test_connect_with_valid_credentials_success()
     {
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'port' => 22,
+            'password' => 'testpass'
+        ]);
+
         $this->mockSshService
             ->shouldReceive('connect')
             ->once()
@@ -53,42 +62,52 @@ class ServerControllerTest extends TestCase
             ->andReturn(true);
 
         $response = $this->postJson(route('server-manager.servers.connect'), [
-            'host' => 'test.example.com',
-            'username' => 'testuser',
-            'port' => 22,
-            'password' => 'testpass'
+            'server_id' => $server->id
         ]);
 
         $response->assertStatus(200);
         $response->assertJson([
-            'success' => true,
-            'message' => 'Connected successfully'
+            'success' => true
         ]);
+        $response->assertJsonFragment(['Connected successfully to Test Server']);
     }
 
     public function test_connect_with_invalid_credentials_fails()
     {
-        $this->mockSshService
-            ->shouldReceive('connect')
-            ->once()
-            ->andReturn(false);
-
-        $response = $this->postJson(route('server-manager.servers.connect'), [
+        $server = Server::create([
+            'name' => 'Test Server',
             'host' => 'test.example.com',
             'username' => 'testuser',
             'port' => 22,
             'password' => 'wrongpass'
         ]);
 
+        $this->mockSshService
+            ->shouldReceive('connect')
+            ->once()
+            ->andReturn(false);
+
+        $response = $this->postJson(route('server-manager.servers.connect'), [
+            'server_id' => $server->id
+        ]);
+
         $response->assertStatus(400);
         $response->assertJson([
-            'success' => false,
-            'message' => 'Failed to connect'
+            'success' => false
         ]);
+        $response->assertJsonFragment(['Failed to connect to Test Server']);
     }
 
     public function test_connect_with_private_key()
     {
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'port' => 22,
+            'private_key' => 'test-key-content'
+        ]);
+
         $this->mockSshService
             ->shouldReceive('connect')
             ->once()
@@ -100,16 +119,12 @@ class ServerControllerTest extends TestCase
             ->andReturn(true);
 
         $response = $this->postJson(route('server-manager.servers.connect'), [
-            'host' => 'test.example.com',
-            'username' => 'testuser',
-            'port' => 22,
-            'private_key' => 'test-key-content'
+            'server_id' => $server->id
         ]);
 
         $response->assertStatus(200);
         $response->assertJson([
-            'success' => true,
-            'message' => 'Connected successfully'
+            'success' => true
         ]);
     }
 
@@ -118,20 +133,25 @@ class ServerControllerTest extends TestCase
         $response = $this->postJson(route('server-manager.servers.connect'), []);
 
         $response->assertStatus(422);
-        $response->assertJsonValidationErrors(['host', 'username']);
+        $response->assertJsonValidationErrors(['server_id']);
     }
 
     public function test_connect_handles_exceptions()
     {
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass'
+        ]);
+
         $this->mockSshService
             ->shouldReceive('connect')
             ->once()
             ->andThrow(new \Exception('Connection timeout'));
 
         $response = $this->postJson(route('server-manager.servers.connect'), [
-            'host' => 'test.example.com',
-            'username' => 'testuser',
-            'password' => 'testpass'
+            'server_id' => $server->id
         ]);
 
         $response->assertStatus(500);
@@ -143,15 +163,20 @@ class ServerControllerTest extends TestCase
 
     public function test_test_connection_success()
     {
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass'
+        ]);
+
         $this->mockSshService
             ->shouldReceive('testConnection')
             ->once()
             ->andReturn(true);
 
         $response = $this->postJson(route('server-manager.servers.test'), [
-            'host' => 'test.example.com',
-            'username' => 'testuser',
-            'password' => 'testpass'
+            'server_id' => $server->id
         ]);
 
         $response->assertStatus(200);
@@ -163,15 +188,20 @@ class ServerControllerTest extends TestCase
 
     public function test_test_connection_failure()
     {
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass'
+        ]);
+
         $this->mockSshService
             ->shouldReceive('testConnection')
             ->once()
             ->andReturn(false);
 
         $response = $this->postJson(route('server-manager.servers.test'), [
-            'host' => 'test.example.com',
-            'username' => 'testuser',
-            'password' => 'testpass'
+            'server_id' => $server->id
         ]);
 
         $response->assertStatus(200);
@@ -230,6 +260,13 @@ class ServerControllerTest extends TestCase
 
     public function test_status_auto_reconnect()
     {
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass'
+        ]);
+
         $this->mockSshService
             ->shouldReceive('isConnected')
             ->once()
@@ -248,12 +285,7 @@ class ServerControllerTest extends TestCase
                 'data' => []
             ]);
 
-        // Set up session with SSH config
-        session(['ssh_config' => [
-            'host' => 'test.example.com',
-            'username' => 'testuser',
-            'password' => 'testpass'
-        ]]);
+        session(['connected_server_id' => $server->id]);
 
         $response = $this->getJson(route('server-manager.servers.status'));
 
@@ -413,5 +445,159 @@ class ServerControllerTest extends TestCase
             'success' => false,
             'message' => 'Service status failed'
         ]);
+    }
+
+    // New CRUD tests
+    public function test_create_server_view()
+    {
+        $response = $this->get(route('server-manager.servers.create'));
+        
+        $response->assertStatus(200);
+        $response->assertViewIs('server-manager::servers.create');
+    }
+
+    public function test_store_server_success()
+    {
+        $serverData = [
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'port' => 22,
+            'auth_type' => 'password',
+            'password' => 'testpass'
+        ];
+
+        $response = $this->postJson(route('server-manager.servers.store'), $serverData);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'message' => 'Server created successfully'
+        ]);
+
+        $this->assertDatabaseHas('servers', [
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser'
+        ]);
+    }
+
+    public function test_store_server_validation()
+    {
+        $response = $this->postJson(route('server-manager.servers.store'), []);
+
+        $response->assertStatus(422);
+        $response->assertJsonValidationErrors(['name', 'host', 'username', 'auth_type']);
+    }
+
+    public function test_show_server()
+    {
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass'
+        ]);
+
+        $response = $this->get(route('server-manager.servers.show', $server));
+
+        $response->assertStatus(200);
+        $response->assertViewIs('server-manager::servers.show');
+        $response->assertViewHas('server', $server);
+    }
+
+    public function test_edit_server_view()
+    {
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass'
+        ]);
+
+        $response = $this->get(route('server-manager.servers.edit', $server));
+
+        $response->assertStatus(200);
+        $response->assertViewIs('server-manager::servers.edit');
+        $response->assertViewHas('server', $server);
+    }
+
+    public function test_update_server_success()
+    {
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass'
+        ]);
+
+        $updateData = [
+            'name' => 'Updated Server',
+            'host' => 'updated.example.com',
+            'username' => 'updateduser',
+            'auth_type' => 'password',
+            'password' => 'newpass'
+        ];
+
+        $response = $this->putJson(route('server-manager.servers.update', $server), $updateData);
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'message' => 'Server updated successfully'
+        ]);
+
+        $server->refresh();
+        $this->assertEquals('Updated Server', $server->name);
+        $this->assertEquals('updated.example.com', $server->host);
+    }
+
+    public function test_destroy_server_success()
+    {
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass'
+        ]);
+
+        $this->mockSshService
+            ->shouldReceive('disconnect')
+            ->once();
+
+        $response = $this->deleteJson(route('server-manager.servers.destroy', $server));
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'message' => 'Server deleted successfully'
+        ]);
+
+        $this->assertDatabaseMissing('servers', ['id' => $server->id]);
+    }
+
+    public function test_list_servers_api()
+    {
+        $server1 = Server::create([
+            'name' => 'Server 1',
+            'host' => 'server1.example.com',
+            'username' => 'user1',
+            'password' => 'pass1'
+        ]);
+
+        $server2 = Server::create([
+            'name' => 'Server 2',
+            'host' => 'server2.example.com',
+            'username' => 'user2',
+            'password' => 'pass2'
+        ]);
+
+        $response = $this->getJson(route('server-manager.servers.list'));
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true
+        ]);
+        $response->assertJsonCount(2, 'servers');
     }
 }

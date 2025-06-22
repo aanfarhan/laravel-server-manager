@@ -30,6 +30,9 @@ abstract class TestCase extends Orchestra
             'prefix' => '',
         ]);
 
+        // Set app key for encryption
+        config()->set('app.key', 'base64:'.base64_encode(random_bytes(32)));
+
         $app['config']->set('server-manager', [
             'ssh' => [
                 'timeout' => 30,

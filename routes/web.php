@@ -10,6 +10,13 @@ Route::prefix('server-manager')->name('server-manager.')->group(function () {
     // Server Management Routes
     Route::get('/', [ServerController::class, 'index'])->name('index');
     Route::get('/servers', [ServerController::class, 'index'])->name('servers.index');
+    Route::get('/servers/create', [ServerController::class, 'create'])->name('servers.create');
+    Route::post('/servers', [ServerController::class, 'store'])->name('servers.store');
+    Route::get('/servers/{server}', [ServerController::class, 'show'])->name('servers.show');
+    Route::get('/servers/{server}/edit', [ServerController::class, 'edit'])->name('servers.edit');
+    Route::put('/servers/{server}', [ServerController::class, 'update'])->name('servers.update');
+    Route::delete('/servers/{server}', [ServerController::class, 'destroy'])->name('servers.destroy');
+    Route::get('/servers/list/all', [ServerController::class, 'list'])->name('servers.list');
     Route::post('/servers/connect', [ServerController::class, 'connect'])->name('servers.connect');
     Route::post('/servers/test-connection', [ServerController::class, 'testConnection'])->name('servers.test');
     Route::post('/servers/disconnect', [ServerController::class, 'disconnect'])->name('servers.disconnect');
