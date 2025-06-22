@@ -53,8 +53,9 @@ class ServerController extends Controller
         }
     }
 
-    public function show(Server $server)
+    public function show($server)
     {
+        $server = Server::findOrFail($server);
         $server = $server->load(['deployments', 'monitoringLogs' => function($query) {
             $query->latest()->limit(10);
         }]);
@@ -62,23 +63,28 @@ class ServerController extends Controller
         return view('server-manager::servers.show', compact('server'));
     }
 
-    public function edit(Server $server)
+    public function edit($server)
     {
+        $server = Server::findOrFail($server);
         return view('server-manager::servers.edit', compact('server'));
     }
 
-    public function update(ServerRequest $request, Server $server)
+    public function update(ServerRequest $request, $server)
     {
         try {
+            // Manually find the server instead of relying on route model binding
+            $server = Server::findOrFail($server);
+            
             $data = $request->validated();
             unset($data['auth_type']); // Remove helper field
             
             $server->update($data);
+            $server->refresh();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Server updated successfully',
-                'server' => $server->fresh()->load('deployments', 'monitoringLogs')
+                'server' => $server->load('deployments', 'monitoringLogs')
             ]);
 
         } catch (\Exception $e) {
@@ -89,9 +95,11 @@ class ServerController extends Controller
         }
     }
 
-    public function destroy(Server $server)
+    public function destroy($server)
     {
         try {
+            $server = Server::findOrFail($server);
+            
             // Disconnect if connected
             if ($server->isConnected()) {
                 $this->sshService->disconnect();
