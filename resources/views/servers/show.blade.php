@@ -386,14 +386,21 @@ function serverDetails() {
                 const response = await fetch('{{ route("server-manager.servers.disconnect") }}', {
                     method: 'POST',
                     headers: {
+                        'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     }
                 });
                 
-                this.connected = false;
-                this.status = {};
-                alert('✅ Disconnected successfully');
-                location.reload();
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                    this.connected = false;
+                    this.status = {};
+                    alert('✅ Disconnected successfully');
+                    location.reload();
+                } else {
+                    alert('❌ Disconnect failed: ' + (result.message || 'Unknown error'));
+                }
             } catch (error) {
                 alert('❌ Disconnect failed: ' + error.message);
             }

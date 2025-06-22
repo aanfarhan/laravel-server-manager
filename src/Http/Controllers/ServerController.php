@@ -78,6 +78,16 @@ class ServerController extends Controller
             $data = $request->validated();
             unset($data['auth_type']); // Remove helper field
             
+            // Handle credential switching logic
+            if ($request->input('auth_type') === 'password') {
+                // When using password auth, clear private key fields
+                $data['private_key'] = null;
+                $data['private_key_password'] = null;
+            } elseif ($request->input('auth_type') === 'key') {
+                // When using key auth, clear password field
+                $data['password'] = null;
+            }
+            
             $server->update($data);
             $server->refresh();
 

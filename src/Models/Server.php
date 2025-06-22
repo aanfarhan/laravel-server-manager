@@ -66,8 +66,19 @@ class Server extends Model
 
     public function setPasswordAttribute($value)
     {
+        // Don't encrypt null values or already encrypted values
+        if ($value === null) {
+            $this->attributes['password'] = null;
+            return;
+        }
+        
         if (config('server-manager.security.encrypt_credentials', true) && $value) {
-            $this->attributes['password'] = Crypt::encryptString($value);
+            // Check if value is already encrypted (to prevent double encryption)
+            if (is_string($value) && str_contains($value, '"iv":')) {
+                $this->attributes['password'] = $value;
+            } else {
+                $this->attributes['password'] = Crypt::encryptString($value);
+            }
         } else {
             $this->attributes['password'] = $value;
         }

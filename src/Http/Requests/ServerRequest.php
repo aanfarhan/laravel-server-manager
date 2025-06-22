@@ -78,27 +78,17 @@ class ServerRequest extends FormRequest
 
     protected function passedValidation(): void
     {
-        // Clean up fields based on auth type
-        if ($this->input('auth_type') === 'password') {
-            $this->merge([
-                'private_key' => null,
-                'private_key_password' => null
-            ]);
-        } elseif ($this->input('auth_type') === 'key') {
-            $this->merge([
-                'password' => null
-            ]);
-        }
-        
-        // For updates, remove empty credential fields to keep existing ones
+        // For updates, remove empty credential fields to preserve existing ones
         if ($this->isMethod('put') || $this->isMethod('patch')) {
             $data = $this->all();
+            
             if ($this->input('auth_type') === 'password' && empty($this->input('password'))) {
                 unset($data['password']);
             } elseif ($this->input('auth_type') === 'key' && empty($this->input('private_key'))) {
                 unset($data['private_key']);
                 unset($data['private_key_password']);
             }
+            
             $this->replace($data);
         }
     }

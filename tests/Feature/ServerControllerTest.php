@@ -644,4 +644,237 @@ class ServerControllerTest extends TestCase
         // Check that servers is an array
         $this->assertIsArray($response->json('servers'));
     }
+
+    // TDD Bug Fix Tests
+    public function test_ssh_connection_works_after_server_name_update()
+    {
+        // Create a server with password authentication
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass'
+        ]);
+
+        // Update only the server name (should not affect password)
+        $updateData = [
+            'name' => 'Updated Server Name',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'port' => 22,
+            'auth_type' => 'password',
+            // Intentionally leave password empty to keep existing
+        ];
+
+        $response = $this->putJson(route('server-manager.servers.update', $server), $updateData);
+        $response->assertStatus(200);
+
+        // After update, test SSH connection should still work
+        $server->refresh();
+        
+        // Mock successful SSH connection
+        $this->mockSshService
+            ->shouldReceive('connect')
+            ->once()
+            ->with(Mockery::on(function($config) {
+                // Ensure password is properly decrypted and usable for SSH
+                return isset($config['password']) && 
+                       $config['password'] === 'testpass' &&
+                       $config['host'] === 'test.example.com' &&
+                       $config['username'] === 'testuser';
+            }))
+            ->andReturn(true);
+
+        $connectResponse = $this->postJson(route('server-manager.servers.connect'), [
+            'server_id' => $server->id
+        ]);
+
+        $connectResponse->assertStatus(200);
+        $connectResponse->assertJson(['success' => true]);
+    }
+
+    public function test_password_encryption_corruption_bug()
+    {
+        // This test checks for the encryption corruption issue that causes "password need to be instance of xxx" error
+        
+        // Create a server with encrypted password
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass'
+        ]);
+
+        // Verify password is properly encrypted in database
+        $rawPassword = $server->getAttributes()['password'];
+        $this->assertNotEquals('testpass', $rawPassword, 'Password should be encrypted in database');
+
+        // Update the server name only, should NOT send password field
+        $updateData = [
+            'name' => 'Updated Server Name',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'port' => 22,
+            'auth_type' => 'password',
+            // Note: NO password field - this should preserve existing encrypted password
+        ];
+
+        $response = $this->putJson(route('server-manager.servers.update', $server), $updateData);
+        $response->assertStatus(200);
+
+        // Reload the server and check that password is still properly encrypted/decryptable
+        $server->refresh();
+        
+        // Test that getSshConfig() can properly decrypt the password
+        $sshConfig = $server->getSshConfig();
+        
+        // This is where the bug occurs - the password might be corrupted or become null
+        $this->assertNotNull($sshConfig['password'], 'Password should not be null after name-only update');
+        $this->assertEquals('testpass', $sshConfig['password'], 'Password should still be decryptable to original value');
+        
+        // Test actual SSH connection to verify password works
+        $this->mockSshService
+            ->shouldReceive('connect')
+            ->once()
+            ->with(Mockery::on(function($config) {
+                return isset($config['password']) && 
+                       $config['password'] === 'testpass' &&
+                       !is_null($config['password']);
+            }))
+            ->andReturn(true);
+
+        $connectResponse = $this->postJson(route('server-manager.servers.connect'), [
+            'server_id' => $server->id
+        ]);
+
+        $connectResponse->assertStatus(200);
+        $connectResponse->assertJson(['success' => true]);
+    }
+
+    public function test_disconnect_button_functionality()
+    {
+        // Create a connected server
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass',
+            'status' => 'connected'
+        ]);
+
+        // Set session to simulate connected state
+        session(['connected_server_id' => $server->id]);
+
+        // Mock the SSH service disconnect
+        $this->mockSshService
+            ->shouldReceive('disconnect')
+            ->once();
+
+        // Test disconnect endpoint
+        $response = $this->postJson(route('server-manager.servers.disconnect'));
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'message' => 'Disconnected successfully'
+        ]);
+
+        // Verify session was cleared
+        $this->assertNull(session('connected_server_id'));
+        
+        // Verify server status was updated
+        $server->refresh();
+        $this->assertEquals('disconnected', $server->status);
+    }
+
+    public function test_server_update_preserves_password_when_not_provided()
+    {
+        // Create server with password
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'original_password'
+        ]);
+
+        $originalPasswordEncrypted = $server->getAttributes()['password'];
+
+        // Update without providing password - should preserve existing
+        $updateData = [
+            'name' => 'Updated Name',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'port' => 22,
+            'auth_type' => 'password'
+            // No password field
+        ];
+
+        $response = $this->putJson(route('server-manager.servers.update', $server), $updateData);
+        $response->assertStatus(200);
+
+        $server->refresh();
+        
+        // Password should be preserved
+        $this->assertEquals($originalPasswordEncrypted, $server->getAttributes()['password']);
+        $this->assertEquals('original_password', $server->password);
+    }
+
+    public function test_server_update_changes_password_when_provided()
+    {
+        // Create server with password
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'original_password'
+        ]);
+
+        // Update with new password
+        $updateData = [
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'port' => 22,
+            'auth_type' => 'password',
+            'password' => 'new_password'
+        ];
+
+        $response = $this->putJson(route('server-manager.servers.update', $server), $updateData);
+        $response->assertStatus(200);
+
+        $server->refresh();
+        
+        // Password should be updated
+        $this->assertEquals('new_password', $server->password);
+    }
+
+    public function test_switching_from_password_to_key_auth()
+    {
+        // Create server with password auth
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'test_password'
+        ]);
+
+        // Switch to key auth
+        $updateData = [
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'port' => 22,
+            'auth_type' => 'key',
+            'private_key' => 'test-private-key-content'
+        ];
+
+        $response = $this->putJson(route('server-manager.servers.update', $server), $updateData);
+        $response->assertStatus(200);
+
+        $server->refresh();
+        
+        // Password should be null, private key should be set
+        $this->assertNull($server->password);
+        $this->assertEquals('test-private-key-content', $server->private_key);
+    }
 }
