@@ -1,12 +1,12 @@
 {
-    "name": "servermanager/laravel-server-manager",
+    "name": "omniglies/laravel-server-manager",
     "description": "A Laravel package for server management with SSH connectivity, git deployment, monitoring, and log viewing",
     "type": "library",
     "license": "MIT",
     "authors": [
         {
-            "name": "Server Manager",
-            "email": "admin@servermanager.com"
+            "name": "Farhan",
+            "email": "abaz.nurfarhana@gmail.com"
         }
     ],
     "require": {
