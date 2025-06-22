@@ -55,7 +55,7 @@ class ServerController extends Controller
 
     public function show(Server $server)
     {
-        $server->load(['deployments', 'monitoringLogs' => function($query) {
+        $server = $server->load(['deployments', 'monitoringLogs' => function($query) {
             $query->latest()->limit(10);
         }]);
 

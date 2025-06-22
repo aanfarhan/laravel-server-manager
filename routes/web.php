@@ -11,18 +11,18 @@ Route::prefix('server-manager')->name('server-manager.')->group(function () {
     Route::get('/', [ServerController::class, 'index'])->name('index');
     Route::get('/servers', [ServerController::class, 'index'])->name('servers.index');
     Route::get('/servers/create', [ServerController::class, 'create'])->name('servers.create');
+    Route::get('/servers/list/all', [ServerController::class, 'list'])->name('servers.list');
+    Route::get('/servers/status', [ServerController::class, 'status'])->name('servers.status');
+    Route::get('/servers/processes', [ServerController::class, 'processes'])->name('servers.processes');
+    Route::get('/servers/services', [ServerController::class, 'services'])->name('servers.services');
     Route::post('/servers', [ServerController::class, 'store'])->name('servers.store');
+    Route::post('/servers/connect', [ServerController::class, 'connect'])->name('servers.connect');
+    Route::post('/servers/test-connection', [ServerController::class, 'testConnection'])->name('servers.test');
+    Route::post('/servers/disconnect', [ServerController::class, 'disconnect'])->name('servers.disconnect');
     Route::get('/servers/{server}', [ServerController::class, 'show'])->name('servers.show');
     Route::get('/servers/{server}/edit', [ServerController::class, 'edit'])->name('servers.edit');
     Route::put('/servers/{server}', [ServerController::class, 'update'])->name('servers.update');
     Route::delete('/servers/{server}', [ServerController::class, 'destroy'])->name('servers.destroy');
-    Route::get('/servers/list/all', [ServerController::class, 'list'])->name('servers.list');
-    Route::post('/servers/connect', [ServerController::class, 'connect'])->name('servers.connect');
-    Route::post('/servers/test-connection', [ServerController::class, 'testConnection'])->name('servers.test');
-    Route::post('/servers/disconnect', [ServerController::class, 'disconnect'])->name('servers.disconnect');
-    Route::get('/servers/status', [ServerController::class, 'status'])->name('servers.status');
-    Route::get('/servers/processes', [ServerController::class, 'processes'])->name('servers.processes');
-    Route::get('/servers/services', [ServerController::class, 'services'])->name('servers.services');
     
     // Deployment Routes
     Route::get('/deployments', [DeploymentController::class, 'index'])->name('deployments.index');
