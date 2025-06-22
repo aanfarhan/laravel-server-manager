@@ -15,7 +15,7 @@ A comprehensive Laravel package for server management with SSH connectivity, git
 1. Install the package via Composer:
 
 ```bash
-composer require servermanager/laravel-server-manager
+composer require omniglies/laravel-server-manager
 ```
 
 2. Publish the configuration file:
