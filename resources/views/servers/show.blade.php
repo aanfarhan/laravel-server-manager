@@ -596,7 +596,10 @@ function serverDetails() {
         async loadLogFiles() {
             try {
                 const response = await fetch('{{ route("server-manager.logs.files") }}?' + 
-                    new URLSearchParams({ directory: this.logDirectory }));
+                    new URLSearchParams({ 
+                        directory: this.logDirectory,
+                        server_id: {{ $server->id }}
+                    }));
                 
                 const result = await response.json();
                 
@@ -614,7 +617,11 @@ function serverDetails() {
             this.selectedLogPath = path;
             try {
                 const response = await fetch('{{ route("server-manager.logs.read") }}?' + 
-                    new URLSearchParams({ path: path, lines: this.logLines }));
+                    new URLSearchParams({ 
+                        path: path, 
+                        lines: this.logLines,
+                        server_id: {{ $server->id }}
+                    }));
                 
                 const result = await response.json();
                 
@@ -632,7 +639,11 @@ function serverDetails() {
             this.selectedLogPath = path;
             try {
                 const response = await fetch('{{ route("server-manager.logs.tail") }}?' + 
-                    new URLSearchParams({ path: path, lines: 50 }));
+                    new URLSearchParams({ 
+                        path: path, 
+                        lines: 50,
+                        server_id: {{ $server->id }}
+                    }));
                 
                 const result = await response.json();
                 
@@ -655,7 +666,8 @@ function serverDetails() {
                     new URLSearchParams({ 
                         path: this.selectedLogPath, 
                         pattern: this.searchPattern,
-                        lines: this.logLines 
+                        lines: this.logLines,
+                        server_id: {{ $server->id }}
                     }));
                 
                 const result = await response.json();
@@ -679,7 +691,10 @@ function serverDetails() {
         async downloadLog(path) {
             try {
                 const response = await fetch('{{ route("server-manager.logs.download") }}?' + 
-                    new URLSearchParams({ path: path }));
+                    new URLSearchParams({ 
+                        path: path,
+                        server_id: {{ $server->id }}
+                    }));
                 
                 if (response.ok) {
                     const blob = await response.blob();
@@ -714,7 +729,10 @@ function serverDetails() {
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
-                    body: JSON.stringify({ path: this.selectedLogPath })
+                    body: JSON.stringify({ 
+                        path: this.selectedLogPath,
+                        server_id: {{ $server->id }}
+                    })
                 });
                 
                 const result = await response.json();
@@ -738,7 +756,10 @@ function serverDetails() {
                         'Content-Type': 'application/json',
                         'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
                     },
-                    body: JSON.stringify({ path: this.selectedLogPath })
+                    body: JSON.stringify({ 
+                        path: this.selectedLogPath,
+                        server_id: {{ $server->id }}
+                    })
                 });
                 
                 const result = await response.json();

@@ -27,20 +27,19 @@ class LogController extends Controller
     /**
      * Ensure SSH connection is available, attempting auto-reconnect if needed
      */
-    protected function ensureConnection(): void
+    protected function ensureConnection(?int $serverId = null): void
     {
         if (!$this->sshService->isConnected()) {
-            // Get connected server from session first
-            $serverId = session('connected_server_id');
-            
-            // If no session server, try to find any connected server
-            if (!$serverId) {
+            // Priority order: 1) passed server_id, 2) session server, 3) any connected server
+            if ($serverId) {
+                $server = Server::findOrFail($serverId);
+            } elseif ($sessionServerId = session('connected_server_id')) {
+                $server = Server::findOrFail($sessionServerId);
+            } else {
                 $server = Server::where('status', 'connected')->first();
                 if (!$server) {
                     throw new \Exception('SSH connection required');
                 }
-            } else {
-                $server = Server::findOrFail($serverId);
             }
             
             // Attempt to connect
@@ -54,17 +53,16 @@ class LogController extends Controller
             
             $server->updateConnectionStatus('connected');
             
-            // Set session if it wasn't already set
-            if (!session('connected_server_id')) {
-                session(['connected_server_id' => $server->id]);
-            }
+            // Set session to the current server
+            session(['connected_server_id' => $server->id]);
         }
     }
 
     public function files(Request $request)
     {
         try {
-            $this->ensureConnection();
+            $serverId = $request->get('server_id');
+            $this->ensureConnection($serverId);
 
             $directory = $request->get('directory', '/var/log');
             $result = $this->logService->getLogFiles($directory);
@@ -87,7 +85,8 @@ class LogController extends Controller
         ]);
 
         try {
-            $this->ensureConnection();
+            $serverId = $request->get('server_id');
+            $this->ensureConnection($serverId);
 
             $lines = $request->get('lines', config('server-manager.logs.default_lines'));
             $result = $this->logService->readLog($request->path, $lines);
@@ -111,7 +110,8 @@ class LogController extends Controller
         ]);
 
         try {
-            $this->ensureConnection();
+            $serverId = $request->get('server_id');
+            $this->ensureConnection($serverId);
 
             $lines = $request->get('lines', config('server-manager.logs.default_lines'));
             $result = $this->logService->searchLog($request->path, $request->pattern, $lines);
@@ -134,7 +134,8 @@ class LogController extends Controller
         ]);
 
         try {
-            $this->ensureConnection();
+            $serverId = $request->get('server_id');
+            $this->ensureConnection($serverId);
 
             $lines = $request->get('lines', 50);
             $result = $this->logService->tailLog($request->path, $lines);
@@ -156,7 +157,8 @@ class LogController extends Controller
         ]);
 
         try {
-            $this->ensureConnection();
+            $serverId = $request->get('server_id');
+            $this->ensureConnection($serverId);
 
             $localPath = storage_path('app/temp/' . basename($request->path) . '_' . time());
             $result = $this->logService->downloadLog($request->path, $localPath);
@@ -182,7 +184,8 @@ class LogController extends Controller
         ]);
 
         try {
-            $this->ensureConnection();
+            $serverId = $request->get('server_id');
+            $this->ensureConnection($serverId);
 
             $result = $this->logService->clearLog($request->path);
 
@@ -203,7 +206,8 @@ class LogController extends Controller
         ]);
 
         try {
-            $this->ensureConnection();
+            $serverId = $request->get('server_id');
+            $this->ensureConnection($serverId);
 
             $result = $this->logService->rotateLog($request->path);
 
@@ -220,7 +224,8 @@ class LogController extends Controller
     public function errors(Request $request)
     {
         try {
-            $this->ensureConnection();
+            $serverId = $request->get('server_id');
+            $this->ensureConnection($serverId);
 
             $logPaths = $request->get('paths', config('server-manager.logs.default_paths'));
             $hours = $request->get('hours', 24);
