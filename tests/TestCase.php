@@ -39,11 +39,13 @@ abstract class TestCase extends Orchestra
                 'port' => 22,
                 'auth_methods' => ['password', 'key'],
             ],
-            'deployment' => [
-                'default_branch' => 'main',
-                'timeout' => 300,
-                'backup_before_deploy' => true,
-                'rollback_limit' => 5,
+            'terminal' => [
+                'session_timeout' => 3600,
+                'max_sessions_per_server' => 5,
+                'output_buffer_size' => 8192,
+                'default_rows' => 24,
+                'default_cols' => 80,
+                'polling_interval' => 500,
             ],
             'monitoring' => [
                 'refresh_interval' => 30,

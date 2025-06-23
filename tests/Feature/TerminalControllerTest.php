@@ -89,7 +89,7 @@ class TerminalControllerTest extends TestCase
             'success' => true,
             'command' => 'ls -la'
         ]);
-        $response->assertJsonFragment(['output']);
+        $response->assertJsonStructure(['output']);
     }
 
     public function test_execute_command_validation()

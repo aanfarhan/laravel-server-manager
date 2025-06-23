@@ -42,7 +42,7 @@ class TerminalServiceTest extends TestCase
         $result = $this->terminalService->createSession($server);
 
         $this->assertFalse($result['success']);
-        $this->assertStringContains('Failed to establish SSH connection', $result['message']);
+        $this->assertStringContainsString('Failed to establish SSH connection', $result['message']);
     }
 
     public function test_create_session_success()
@@ -89,7 +89,7 @@ class TerminalServiceTest extends TestCase
         $result = $this->terminalService->createSession($server);
 
         $this->assertFalse($result['success']);
-        $this->assertStringContains('Failed to create shell session', $result['message']);
+        $this->assertStringContainsString('Failed to create shell session', $result['message']);
     }
 
     public function test_execute_command_invalid_session()
@@ -97,7 +97,7 @@ class TerminalServiceTest extends TestCase
         $result = $this->terminalService->executeCommand('invalid_session', 'ls');
 
         $this->assertFalse($result['success']);
-        $this->assertStringContains('Terminal session not found', $result['message']);
+        $this->assertStringContainsString('Terminal session not found', $result['message']);
     }
 
     public function test_send_input_invalid_session()
@@ -105,7 +105,7 @@ class TerminalServiceTest extends TestCase
         $result = $this->terminalService->sendInput('invalid_session', 'test');
 
         $this->assertFalse($result['success']);
-        $this->assertStringContains('Terminal session not found', $result['message']);
+        $this->assertStringContainsString('Terminal session not found', $result['message']);
     }
 
     public function test_get_output_invalid_session()
@@ -113,7 +113,7 @@ class TerminalServiceTest extends TestCase
         $result = $this->terminalService->getOutput('invalid_session');
 
         $this->assertFalse($result['success']);
-        $this->assertStringContains('Terminal session not found', $result['message']);
+        $this->assertStringContainsString('Terminal session not found', $result['message']);
         $this->assertFalse($result['session_active']);
     }
 
@@ -122,7 +122,7 @@ class TerminalServiceTest extends TestCase
         $result = $this->terminalService->closeSession('nonexistent_session');
 
         $this->assertTrue($result['success']);
-        $this->assertStringContains('already closed', $result['message']);
+        $this->assertStringContainsString('already closed', $result['message']);
     }
 
     public function test_get_session_info_invalid()
@@ -130,7 +130,7 @@ class TerminalServiceTest extends TestCase
         $result = $this->terminalService->getSessionInfo('invalid_session');
 
         $this->assertFalse($result['success']);
-        $this->assertStringContains('Session not found', $result['message']);
+        $this->assertStringContainsString('Session not found', $result['message']);
     }
 
     public function test_get_active_sessions_empty()
@@ -155,7 +155,7 @@ class TerminalServiceTest extends TestCase
         $result = $this->terminalService->resizeTerminal('invalid_session', 24, 80);
 
         $this->assertFalse($result['success']);
-        $this->assertStringContains('Terminal session not found', $result['message']);
+        $this->assertStringContainsString('Terminal session not found', $result['message']);
     }
 
     public function test_generate_session_id_is_unique()
@@ -169,8 +169,8 @@ class TerminalServiceTest extends TestCase
         $id2 = $method->invoke($this->terminalService);
 
         $this->assertNotEquals($id1, $id2);
-        $this->assertStringContains('term_', $id1);
-        $this->assertStringContains('term_', $id2);
+        $this->assertStringContainsString('term_', $id1);
+        $this->assertStringContainsString('term_', $id2);
     }
 
     public function test_service_constructor_dependency()

@@ -102,19 +102,18 @@ class SshService
             
             // Enable PTY for interactive shell
             $this->connection->enablePTY();
+            $this->connection->setTerminal('xterm-256color');
+            $this->connection->setWindowSize(80, 24);
+            $this->connection->setTimeout(10);
             
-            // Create shell
-            $shell = $this->connection->getShell();
-            
-            if (!$shell) {
-                throw new Exception("Failed to create shell");
-            }
+            // Wait for initial prompt to establish shell session
+            $initialOutput = $this->connection->read('$|#|%|>', SSH2::READ_REGEX);
 
             $this->shells[$shellId] = [
-                'resource' => $shell,
                 'connection' => $this->connection,
                 'created_at' => time(),
-                'last_activity' => time()
+                'last_activity' => time(),
+                'buffer' => $initialOutput
             ];
 
             return $shellId;
@@ -137,20 +136,13 @@ class SshService
 
         try {
             // Send command to shell
-            fputs($shell['resource'], $command . "\n");
+            $shell['connection']->write($command . "\n");
             
-            // Wait a moment for output
-            usleep(200000); // 200ms
+            // Read output until we get a prompt
+            $output = $shell['connection']->read('$|#|%|>', SSH2::READ_REGEX);
             
-            // Read output
-            $output = '';
-            while (($line = fgets($shell['resource'])) !== false) {
-                $output .= $line;
-                // Break if we don't get more data quickly
-                if (stream_select($read = [$shell['resource']], $write = null, $except = null, 0, 100000) === 0) {
-                    break;
-                }
-            }
+            // Update buffer with new output
+            $this->shells[$shellId]['buffer'] = $output;
 
             return $output;
         } catch (Exception $e) {
@@ -172,19 +164,25 @@ class SshService
 
         try {
             // Send input to shell
-            fputs($shell['resource'], $input);
+            $shell['connection']->write($input);
             
-            // Small delay to allow processing
-            usleep(100000); // 100ms
+            // For raw input, we may not always get a prompt back
+            // Read with a shorter timeout
+            $originalTimeout = $shell['connection']->getTimeout();
+            $shell['connection']->setTimeout(2);
             
-            // Read any immediate output
-            $output = '';
-            while (($line = fgets($shell['resource'])) !== false) {
-                $output .= $line;
-                if (stream_select($read = [$shell['resource']], $write = null, $except = null, 0, 50000) === 0) {
-                    break;
-                }
+            try {
+                $output = $shell['connection']->read('$|#|%|>', SSH2::READ_REGEX);
+            } catch (Exception $e) {
+                // If no prompt received, just read what's available
+                $output = $shell['connection']->read();
             }
+            
+            // Restore original timeout
+            $shell['connection']->setTimeout($originalTimeout);
+            
+            // Update buffer
+            $this->shells[$shellId]['buffer'] = $output;
 
             return $output;
         } catch (Exception $e) {
@@ -204,19 +202,29 @@ class SshService
         $shell = $this->shells[$shellId];
 
         try {
-            $output = '';
+            // Return current buffer or try to read new output
+            $currentBuffer = $this->shells[$shellId]['buffer'] ?? '';
             
-            // Read any available output without blocking
-            while (($line = fgets($shell['resource'])) !== false) {
-                $output .= $line;
-                if (stream_select($read = [$shell['resource']], $write = null, $except = null, 0, 10000) === 0) {
-                    break;
+            // Try to read any new output with minimal timeout
+            $originalTimeout = $shell['connection']->getTimeout();
+            $shell['connection']->setTimeout(1);
+            
+            try {
+                $newOutput = $shell['connection']->read('');
+                if (!empty($newOutput)) {
+                    $currentBuffer .= $newOutput;
+                    $this->shells[$shellId]['buffer'] = $currentBuffer;
                 }
+            } catch (Exception $e) {
+                // No new output available
             }
+            
+            // Restore timeout
+            $shell['connection']->setTimeout($originalTimeout);
 
-            return $output;
+            return $currentBuffer;
         } catch (Exception $e) {
-            return '';
+            return $this->shells[$shellId]['buffer'] ?? '';
         }
     }
 
@@ -230,8 +238,11 @@ class SshService
         }
 
         try {
-            // phpseclib3 handles terminal resizing automatically in most cases
-            // For more advanced terminal control, we would need additional logic
+            $shell = $this->shells[$shellId];
+            
+            // Set new window size on the connection
+            $shell['connection']->setWindowSize($cols, $rows);
+            
             return true;
         } catch (Exception $e) {
             return false;
@@ -250,9 +261,11 @@ class SshService
         try {
             $shell = $this->shells[$shellId];
             
-            // Close shell resource
-            if (is_resource($shell['resource'])) {
-                fclose($shell['resource']);
+            // Send exit command to gracefully close shell
+            try {
+                $shell['connection']->write("exit\n");
+            } catch (Exception $e) {
+                // Ignore errors when sending exit command
             }
 
             unset($this->shells[$shellId]);
