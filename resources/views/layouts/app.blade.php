@@ -46,8 +46,9 @@
     </div>
 
     <script>
+        import axios from 'axios';
         // Set up CSRF token for axios
-        window.axios = require('axios');
+        window.axios = axios;
         window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
         let token = document.head.querySelector('meta[name="csrf-token"]');
         if (token) {
