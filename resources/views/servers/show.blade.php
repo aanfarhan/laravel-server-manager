@@ -89,17 +89,17 @@
             </div>
         </div>
 
-        <!-- Deployments Count -->
+        <!-- Connection Type -->
         <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
             <div class="p-6">
                 <div class="flex items-center">
                     <div class="flex-shrink-0">
-                        <i class="fas fa-rocket text-2xl text-purple-500"></i>
+                        <i class="fas fa-key text-2xl text-purple-500"></i>
                     </div>
                     <div class="ml-5 w-0 flex-1">
                         <dl>
-                            <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Deployments</dt>
-                            <dd class="text-lg font-medium text-gray-900 dark:text-white">{{ $server->deployments->count() }}</dd>
+                            <dt class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">Auth Type</dt>
+                            <dd class="text-lg font-medium text-gray-900 dark:text-white">{{ ucfirst($server->connection_type) }}</dd>
                         </dl>
                     </div>
                 </div>
@@ -208,69 +208,6 @@
         </div>
     </div>
 
-    <!-- Recent Deployments -->
-    @if($server->deployments->count() > 0)
-    <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
-        <div class="px-4 py-5 sm:px-6 flex justify-between items-center">
-            <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white">
-                <i class="fas fa-rocket mr-2"></i>
-                Recent Deployments
-            </h3>
-            <a href="{{ route('server-manager.deployments.index') }}" 
-               class="text-sm text-blue-600 hover:text-blue-900 dark:text-blue-400">
-                View All
-            </a>
-        </div>
-        <div class="border-t border-gray-200 dark:border-gray-700">
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead class="bg-gray-50 dark:bg-gray-700">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Name</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Repository</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Last Deployed</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                        @foreach($server->deployments->take(5) as $deployment)
-                            <tr>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
-                                    {{ $deployment->name }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                    {{ $deployment->repository }}
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap">
-                                    @if($deployment->status === 'success')
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                            Success
-                                        </span>
-                                    @elseif($deployment->status === 'failed')
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                            Failed
-                                        </span>
-                                    @elseif($deployment->status === 'deploying')
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                                            Deploying
-                                        </span>
-                                    @else
-                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                                            Idle
-                                        </span>
-                                    @endif
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                                    {{ $deployment->last_deployed_at ? $deployment->last_deployed_at->diffForHumans() : 'Never' }}
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    @endif
 
     <!-- Tabs Navigation -->
     <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
@@ -287,6 +224,12 @@
                         class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                     <i class="fas fa-file-alt mr-2"></i>
                     Logs
+                </button>
+                <button @click="activeTab = 'terminal'" 
+                        :class="activeTab === 'terminal' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    <i class="fas fa-terminal mr-2"></i>
+                    Terminal
                 </button>
             </nav>
         </div>
@@ -470,6 +413,104 @@
                 </div>
             </div>
         </div>
+
+        <!-- Terminal Tab -->
+        <div x-show="activeTab === 'terminal'" class="p-6">
+            <div class="space-y-4">
+                <!-- Terminal Controls -->
+                <div class="flex justify-between items-center">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white">
+                        <i class="fas fa-terminal mr-2"></i>
+                        Terminal Session
+                    </h3>
+                    <div class="flex space-x-2">
+                        <button @click="createTerminalSession()" 
+                                :disabled="terminalLoading || terminalSession"
+                                class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50">
+                            <i class="fas fa-play mr-1"></i>
+                            Start Terminal
+                        </button>
+                        <button @click="closeTerminalSession()" 
+                                x-show="terminalSession"
+                                class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                            <i class="fas fa-stop mr-1"></i>
+                            Close Terminal
+                        </button>
+                        <button @click="clearTerminal()" 
+                                x-show="terminalSession"
+                                class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">
+                            <i class="fas fa-eraser mr-1"></i>
+                            Clear
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Terminal Container -->
+                <div x-show="terminalSession" class="space-y-4">
+                    <div class="bg-black rounded-lg border border-gray-300 dark:border-gray-600">
+                        <!-- Terminal Header -->
+                        <div class="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-t-lg border-b border-gray-300 dark:border-gray-600">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-3 h-3 bg-red-500 rounded-full"></div>
+                                <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                                <div class="w-3 h-3 bg-green-500 rounded-full"></div>
+                                <span class="ml-4 text-sm text-gray-600 dark:text-gray-400 font-mono" x-text="'{{ $server->name }} - Terminal'"></span>
+                            </div>
+                            <div class="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
+                                <span x-show="terminalConnected" class="flex items-center">
+                                    <i class="fas fa-circle text-green-500 mr-1"></i>
+                                    Connected
+                                </span>
+                                <span x-show="!terminalConnected" class="flex items-center">
+                                    <i class="fas fa-circle text-red-500 mr-1"></i>
+                                    Disconnected
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <!-- Terminal Display -->
+                        <div id="terminal-container" class="p-4 min-h-96 max-h-96 overflow-hidden">
+                            <!-- xterm.js will be mounted here -->
+                        </div>
+                    </div>
+
+                    <!-- Terminal Input (fallback for non-xterm environments) -->
+                    <div x-show="!xtermLoaded" class="space-y-2">
+                        <div class="flex space-x-2">
+                            <input type="text" 
+                                   x-model="terminalCommand" 
+                                   @keyup.enter="executeCommand()"
+                                   placeholder="Enter command..."
+                                   class="flex-1 border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono">
+                            <button @click="executeCommand()" 
+                                    :disabled="!terminalCommand.trim()"
+                                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50">
+                                <i class="fas fa-play mr-2"></i>
+                                Execute
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Terminal Status/Help -->
+                <div x-show="!terminalSession" class="text-center py-8">
+                    <div class="mx-auto w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
+                        <i class="fas fa-terminal text-3xl text-gray-400"></i>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">No Active Terminal Session</h3>
+                    <p class="text-gray-500 dark:text-gray-400 mb-4">Click "Start Terminal" to open a new interactive terminal session on {{ $server->name }}</p>
+                    <div class="text-sm text-gray-400 dark:text-gray-500">
+                        <p>Features:</p>
+                        <ul class="list-disc list-inside mt-1 space-y-1">
+                            <li>Full interactive terminal with copy/paste support</li>
+                            <li>Real-time command execution</li>
+                            <li>Resizable terminal window</li>
+                            <li>Session persistence until manually closed</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 @endsection
@@ -492,6 +533,15 @@ function serverDetails() {
         logLines: 100,
         autoRefresh: false,
         refreshInterval: null,
+        
+        // Terminal functionality
+        terminalSession: null,
+        terminalLoading: false,
+        terminalConnected: false,
+        terminalCommand: '',
+        xtermLoaded: false,
+        terminal: null,
+        outputPollingInterval: null,
 
         async testConnection() {
             this.loading = true;
@@ -771,6 +821,216 @@ function serverDetails() {
                 this.refreshInterval = setInterval(() => {
                     this.refreshLog();
                 }, 5000);
+            }
+        },
+
+        // Terminal functionality
+        async createTerminalSession() {
+            this.terminalLoading = true;
+            try {
+                const response = await fetch('{{ route("server-manager.terminal.create") }}', {
+                    method: 'POST',
+                    headers: window.getDefaultHeaders(),
+                    body: JSON.stringify({ server_id: {{ $server->id }} })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    this.terminalSession = result.session_id;
+                    this.terminalConnected = true;
+                    
+                    // Initialize xterm.js
+                    await this.initializeTerminal();
+                    
+                    // Start output polling
+                    this.startOutputPolling();
+                    
+                    alert('✅ Terminal session started!');
+                } else {
+                    alert('❌ Failed to start terminal: ' + result.message);
+                }
+            } catch (error) {
+                alert('❌ Failed to start terminal: ' + error.message);
+            }
+            this.terminalLoading = false;
+        },
+
+        async closeTerminalSession() {
+            if (!this.terminalSession) return;
+            
+            try {
+                await fetch('{{ route("server-manager.terminal.close") }}', {
+                    method: 'POST',
+                    headers: window.getDefaultHeaders(),
+                    body: JSON.stringify({ session_id: this.terminalSession })
+                });
+            } catch (error) {
+                console.error('Error closing terminal:', error);
+            }
+            
+            // Clean up
+            this.stopOutputPolling();
+            this.destroyTerminal();
+            this.terminalSession = null;
+            this.terminalConnected = false;
+        },
+
+        async executeCommand() {
+            if (!this.terminalSession || !this.terminalCommand.trim()) return;
+            
+            try {
+                const response = await fetch('{{ route("server-manager.terminal.execute") }}', {
+                    method: 'POST',
+                    headers: window.getDefaultHeaders(),
+                    body: JSON.stringify({ 
+                        session_id: this.terminalSession,
+                        command: this.terminalCommand
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success && this.terminal) {
+                    this.terminal.write(result.output);
+                }
+                
+                this.terminalCommand = '';
+            } catch (error) {
+                console.error('Command execution failed:', error);
+            }
+        },
+
+        async initializeTerminal() {
+            return new Promise((resolve) => {
+                // Load xterm.js if not already loaded
+                if (typeof Terminal === 'undefined') {
+                    const script = document.createElement('script');
+                    script.src = 'https://unpkg.com/xterm@5.3.0/lib/xterm.js';
+                    script.onload = () => {
+                        const css = document.createElement('link');
+                        css.rel = 'stylesheet';
+                        css.href = 'https://unpkg.com/xterm@5.3.0/css/xterm.css';
+                        document.head.appendChild(css);
+                        
+                        this.createTerminalInstance();
+                        resolve();
+                    };
+                    document.head.appendChild(script);
+                } else {
+                    this.createTerminalInstance();
+                    resolve();
+                }
+            });
+        },
+
+        createTerminalInstance() {
+            const container = document.getElementById('terminal-container');
+            if (!container) return;
+            
+            // Clear container
+            container.innerHTML = '';
+            
+            // Create terminal
+            this.terminal = new Terminal({
+                cursorBlink: true,
+                fontSize: 14,
+                fontFamily: 'Consolas, Monaco, "Lucida Console", monospace',
+                theme: {
+                    background: '#000000',
+                    foreground: '#ffffff',
+                    cursor: '#ffffff',
+                    selection: '#ffffff'
+                },
+                rows: 24,
+                cols: 80
+            });
+            
+            // Handle terminal input
+            this.terminal.onData((data) => {
+                if (this.terminalSession) {
+                    this.sendTerminalInput(data);
+                }
+            });
+            
+            // Mount terminal
+            this.terminal.open(container);
+            this.xtermLoaded = true;
+            
+            // Welcome message
+            this.terminal.writeln('\r\n\x1b[1;32mTerminal session started for {{ $server->name }}\x1b[0m');
+            this.terminal.writeln('Type commands below. Use Ctrl+C to interrupt commands.\r\n');
+        },
+
+        async sendTerminalInput(data) {
+            if (!this.terminalSession) return;
+            
+            try {
+                const response = await fetch('{{ route("server-manager.terminal.input") }}', {
+                    method: 'POST',
+                    headers: window.getDefaultHeaders(),
+                    body: JSON.stringify({ 
+                        session_id: this.terminalSession,
+                        input: data
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success && result.output && this.terminal) {
+                    this.terminal.write(result.output);
+                }
+            } catch (error) {
+                console.error('Terminal input failed:', error);
+            }
+        },
+
+        startOutputPolling() {
+            if (this.outputPollingInterval) {
+                clearInterval(this.outputPollingInterval);
+            }
+            
+            this.outputPollingInterval = setInterval(async () => {
+                if (!this.terminalSession) return;
+                
+                try {
+                    const response = await fetch('{{ route("server-manager.terminal.output") }}?' + 
+                        new URLSearchParams({ session_id: this.terminalSession }));
+                    
+                    const result = await response.json();
+                    if (result.success && result.output && this.terminal) {
+                        this.terminal.write(result.output);
+                    }
+                    
+                    if (!result.session_active) {
+                        this.closeTerminalSession();
+                    }
+                } catch (error) {
+                    console.error('Output polling failed:', error);
+                }
+            }, 500); // Poll every 500ms
+        },
+
+        stopOutputPolling() {
+            if (this.outputPollingInterval) {
+                clearInterval(this.outputPollingInterval);
+                this.outputPollingInterval = null;
+            }
+        },
+
+        clearTerminal() {
+            if (this.terminal) {
+                this.terminal.clear();
+            }
+        },
+
+        destroyTerminal() {
+            if (this.terminal) {
+                this.terminal.dispose();
+                this.terminal = null;
+            }
+            this.xtermLoaded = false;
+            
+            const container = document.getElementById('terminal-container');
+            if (container) {
+                container.innerHTML = '';
             }
         },
 

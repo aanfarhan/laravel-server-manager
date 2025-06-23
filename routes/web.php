@@ -2,8 +2,8 @@
 
 use Illuminate\Support\Facades\Route;
 use ServerManager\LaravelServerManager\Http\Controllers\ServerController;
-use ServerManager\LaravelServerManager\Http\Controllers\DeploymentController;
 use ServerManager\LaravelServerManager\Http\Controllers\LogController;
+use ServerManager\LaravelServerManager\Http\Controllers\TerminalController;
 
 Route::prefix('server-manager')->name('server-manager.')->middleware('web')->group(function () {
     
@@ -24,11 +24,17 @@ Route::prefix('server-manager')->name('server-manager.')->middleware('web')->gro
     Route::put('/servers/{server}', [ServerController::class, 'update'])->name('servers.update');
     Route::delete('/servers/{server}', [ServerController::class, 'destroy'])->name('servers.destroy');
     
-    // Deployment Routes
-    Route::get('/deployments', [DeploymentController::class, 'index'])->name('deployments.index');
-    Route::post('/deployments/deploy', [DeploymentController::class, 'deploy'])->name('deployments.deploy');
-    Route::post('/deployments/rollback', [DeploymentController::class, 'rollback'])->name('deployments.rollback');
-    Route::get('/deployments/status', [DeploymentController::class, 'status'])->name('deployments.status');
+    // Terminal Session Routes
+    Route::post('/terminal/create', [TerminalController::class, 'create'])->name('terminal.create');
+    Route::post('/terminal/execute', [TerminalController::class, 'execute'])->name('terminal.execute');
+    Route::post('/terminal/input', [TerminalController::class, 'input'])->name('terminal.input');
+    Route::get('/terminal/output', [TerminalController::class, 'output'])->name('terminal.output');
+    Route::post('/terminal/resize', [TerminalController::class, 'resize'])->name('terminal.resize');
+    Route::post('/terminal/close', [TerminalController::class, 'close'])->name('terminal.close');
+    Route::get('/terminal/info', [TerminalController::class, 'info'])->name('terminal.info');
+    Route::get('/terminal/sessions', [TerminalController::class, 'sessions'])->name('terminal.sessions');
+    Route::post('/terminal/cleanup', [TerminalController::class, 'cleanup'])->name('terminal.cleanup');
+    Route::post('/terminal/bulk', [TerminalController::class, 'bulk'])->name('terminal.bulk');
     
     // Log Management Routes
     Route::get('/logs', [LogController::class, 'index'])->name('logs.index');

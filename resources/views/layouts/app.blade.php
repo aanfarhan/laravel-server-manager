@@ -26,10 +26,6 @@
                            class="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 px-3 py-2 rounded-md text-sm font-medium">
                             <i class="fas fa-server mr-1"></i> Servers
                         </a>
-                        <a href="{{ route('server-manager.deployments.index') }}" 
-                           class="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 px-3 py-2 rounded-md text-sm font-medium">
-                            <i class="fas fa-rocket mr-1"></i> Deployments
-                        </a>
                     </div>
                 </div>
             </div>

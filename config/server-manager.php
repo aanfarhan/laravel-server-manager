@@ -18,17 +18,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Deployment Settings
+    | Terminal Settings
     |--------------------------------------------------------------------------
     |
-    | Configuration for deployment operations
+    | Configuration for web-based terminal sessions
     |
     */
-    'deployment' => [
-        'default_branch' => 'main',
-        'timeout' => 300, // 5 minutes
-        'backup_before_deploy' => true,
-        'rollback_limit' => 5,
+    'terminal' => [
+        'session_timeout' => 3600, // 1 hour in seconds
+        'max_sessions_per_server' => 5,
+        'output_buffer_size' => 8192,
+        'default_rows' => 24,
+        'default_cols' => 80,
+        'polling_interval' => 500, // milliseconds
     ],
 
     /*

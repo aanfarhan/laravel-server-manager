@@ -42,7 +42,7 @@ class ServerController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Server created successfully',
-                'server' => $server->load('deployments', 'monitoringLogs')
+                'server' => $server->load('monitoringLogs')
             ]);
 
         } catch (\Exception $e) {
@@ -56,7 +56,7 @@ class ServerController extends Controller
     public function show($server)
     {
         $server = Server::findOrFail($server);
-        $server = $server->load(['deployments', 'monitoringLogs' => function($query) {
+        $server = $server->load(['monitoringLogs' => function($query) {
             $query->latest()->limit(10);
         }]);
 
@@ -105,7 +105,7 @@ class ServerController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Server updated successfully',
-                'server' => $server->load('deployments', 'monitoringLogs')
+                'server' => $server->load('monitoringLogs')
             ]);
 
         } catch (\Exception $e) {
@@ -350,7 +350,7 @@ class ServerController extends Controller
     {
         try {
             $servers = Server::select(['id', 'name', 'host', 'port', 'username', 'status', 'last_connected_at', 'created_at'])
-                           ->with(['deployments:id,server_id,name,status', 'monitoringLogs' => function($query) {
+                           ->with(['monitoringLogs' => function($query) {
                                $query->latest()->limit(1);
                            }])
                            ->latest()

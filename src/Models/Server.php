@@ -42,10 +42,6 @@ class Server extends Model
         'private_key_password'
     ];
 
-    public function deployments(): HasMany
-    {
-        return $this->hasMany(Deployment::class);
-    }
 
     public function monitoringLogs(): HasMany
     {

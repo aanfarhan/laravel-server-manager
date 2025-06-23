@@ -27,19 +27,6 @@ class RoutesTest extends TestCase
         }
     }
 
-    public function test_deployment_routes_exist()
-    {
-        $routes = [
-            'server-manager.deployments.index',
-            'server-manager.deployments.deploy',
-            'server-manager.deployments.rollback',
-            'server-manager.deployments.status'
-        ];
-
-        foreach ($routes as $route) {
-            $this->assertTrue(\Route::has($route), "Route {$route} does not exist");
-        }
-    }
 
     public function test_log_management_routes_exist()
     {
@@ -68,8 +55,6 @@ class RoutesTest extends TestCase
             'server-manager.servers.status',
             'server-manager.servers.processes',
             'server-manager.servers.services',
-            'server-manager.deployments.index',
-            'server-manager.deployments.status',
             'server-manager.logs.index',
             'server-manager.logs.files',
             'server-manager.logs.read',
@@ -83,8 +68,6 @@ class RoutesTest extends TestCase
             'server-manager.servers.connect',
             'server-manager.servers.test',
             'server-manager.servers.disconnect',
-            'server-manager.deployments.deploy',
-            'server-manager.deployments.rollback',
             'server-manager.logs.clear',
             'server-manager.logs.rotate'
         ];
@@ -104,7 +87,6 @@ class RoutesTest extends TestCase
     {
         $routes = [
             'server-manager.servers.index',
-            'server-manager.deployments.index',
             'server-manager.logs.index'
         ];
 
@@ -129,7 +111,6 @@ class RoutesTest extends TestCase
     {
         $viewRoutes = [
             'server-manager.servers.index',
-            'server-manager.deployments.index',
             'server-manager.logs.index'
         ];
 
@@ -144,7 +125,6 @@ class RoutesTest extends TestCase
         $apiRoutes = [
             ['POST', 'server-manager.servers.connect'],
             ['GET', 'server-manager.servers.status'],
-            ['POST', 'server-manager.deployments.deploy'],
             ['GET', 'server-manager.logs.files']
         ];
 
@@ -164,7 +144,6 @@ class RoutesTest extends TestCase
     {
         // Test routes that might have parameters
         $routesWithParams = [
-            'server-manager.deployments.status',
             'server-manager.logs.read',
             'server-manager.logs.search'
         ];

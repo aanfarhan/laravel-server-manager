@@ -12,7 +12,7 @@ class ConfigurationTest extends TestCase
         
         $this->assertIsArray($config);
         $this->assertArrayHasKey('ssh', $config);
-        $this->assertArrayHasKey('deployment', $config);
+        $this->assertArrayHasKey('terminal', $config);
         $this->assertArrayHasKey('monitoring', $config);
         $this->assertArrayHasKey('logs', $config);
         $this->assertArrayHasKey('security', $config);
@@ -38,24 +38,30 @@ class ConfigurationTest extends TestCase
         $this->assertContains('key', $sshConfig['auth_methods']);
     }
 
-    public function test_deployment_configuration()
+    public function test_terminal_configuration()
     {
-        $deploymentConfig = config('server-manager.deployment');
+        $terminalConfig = config('server-manager.terminal');
         
-        $this->assertArrayHasKey('default_branch', $deploymentConfig);
-        $this->assertArrayHasKey('timeout', $deploymentConfig);
-        $this->assertArrayHasKey('backup_before_deploy', $deploymentConfig);
-        $this->assertArrayHasKey('rollback_limit', $deploymentConfig);
+        $this->assertArrayHasKey('session_timeout', $terminalConfig);
+        $this->assertArrayHasKey('max_sessions_per_server', $terminalConfig);
+        $this->assertArrayHasKey('output_buffer_size', $terminalConfig);
+        $this->assertArrayHasKey('default_rows', $terminalConfig);
+        $this->assertArrayHasKey('default_cols', $terminalConfig);
+        $this->assertArrayHasKey('polling_interval', $terminalConfig);
         
-        $this->assertIsString($deploymentConfig['default_branch']);
-        $this->assertIsInt($deploymentConfig['timeout']);
-        $this->assertIsBool($deploymentConfig['backup_before_deploy']);
-        $this->assertIsInt($deploymentConfig['rollback_limit']);
+        $this->assertIsInt($terminalConfig['session_timeout']);
+        $this->assertIsInt($terminalConfig['max_sessions_per_server']);
+        $this->assertIsInt($terminalConfig['output_buffer_size']);
+        $this->assertIsInt($terminalConfig['default_rows']);
+        $this->assertIsInt($terminalConfig['default_cols']);
+        $this->assertIsInt($terminalConfig['polling_interval']);
         
-        $this->assertEquals('main', $deploymentConfig['default_branch']);
-        $this->assertEquals(300, $deploymentConfig['timeout']);
-        $this->assertTrue($deploymentConfig['backup_before_deploy']);
-        $this->assertEquals(5, $deploymentConfig['rollback_limit']);
+        $this->assertEquals(3600, $terminalConfig['session_timeout']);
+        $this->assertEquals(5, $terminalConfig['max_sessions_per_server']);
+        $this->assertEquals(8192, $terminalConfig['output_buffer_size']);
+        $this->assertEquals(24, $terminalConfig['default_rows']);
+        $this->assertEquals(80, $terminalConfig['default_cols']);
+        $this->assertEquals(500, $terminalConfig['polling_interval']);
     }
 
     public function test_monitoring_configuration()

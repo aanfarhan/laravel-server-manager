@@ -4,18 +4,18 @@ namespace ServerManager\LaravelServerManager;
 
 use Illuminate\Support\ServiceProvider;
 use ServerManager\LaravelServerManager\Services\SshService;
-use ServerManager\LaravelServerManager\Services\DeploymentService;
 use ServerManager\LaravelServerManager\Services\MonitoringService;
 use ServerManager\LaravelServerManager\Services\LogService;
+use ServerManager\LaravelServerManager\Services\TerminalService;
 
 class ServerManagerServiceProvider extends ServiceProvider
 {
     public function register()
     {
         $this->app->singleton(SshService::class);
-        $this->app->singleton(DeploymentService::class);
         $this->app->singleton(MonitoringService::class);
         $this->app->singleton(LogService::class);
+        $this->app->singleton(TerminalService::class);
 
         $this->mergeConfigFrom(
             __DIR__ . '/../config/server-manager.php',

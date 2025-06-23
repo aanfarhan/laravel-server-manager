@@ -5,7 +5,7 @@ namespace ServerManager\LaravelServerManager\Tests\Unit;
 use ServerManager\LaravelServerManager\Tests\TestCase;
 use ServerManager\LaravelServerManager\ServerManagerServiceProvider;
 use ServerManager\LaravelServerManager\Services\SshService;
-use ServerManager\LaravelServerManager\Services\DeploymentService;
+use ServerManager\LaravelServerManager\Services\TerminalService;
 use ServerManager\LaravelServerManager\Services\MonitoringService;
 use ServerManager\LaravelServerManager\Services\LogService;
 
@@ -14,7 +14,7 @@ class ServiceProviderTest extends TestCase
     public function test_service_provider_registers_services()
     {
         $this->assertInstanceOf(SshService::class, $this->app->make(SshService::class));
-        $this->assertInstanceOf(DeploymentService::class, $this->app->make(DeploymentService::class));
+        $this->assertInstanceOf(TerminalService::class, $this->app->make(TerminalService::class));
         $this->assertInstanceOf(MonitoringService::class, $this->app->make(MonitoringService::class));
         $this->assertInstanceOf(LogService::class, $this->app->make(LogService::class));
     }
@@ -26,10 +26,10 @@ class ServiceProviderTest extends TestCase
         
         $this->assertSame($sshService1, $sshService2);
 
-        $deploymentService1 = $this->app->make(DeploymentService::class);
-        $deploymentService2 = $this->app->make(DeploymentService::class);
+        $terminalService1 = $this->app->make(TerminalService::class);
+        $terminalService2 = $this->app->make(TerminalService::class);
         
-        $this->assertSame($deploymentService1, $deploymentService2);
+        $this->assertSame($terminalService1, $terminalService2);
 
         $monitoringService1 = $this->app->make(MonitoringService::class);
         $monitoringService2 = $this->app->make(MonitoringService::class);
@@ -46,7 +46,7 @@ class ServiceProviderTest extends TestCase
     {
         $this->assertNotNull(config('server-manager'));
         $this->assertNotNull(config('server-manager.ssh'));
-        $this->assertNotNull(config('server-manager.deployment'));
+        $this->assertNotNull(config('server-manager.terminal'));
         $this->assertNotNull(config('server-manager.monitoring'));
         $this->assertNotNull(config('server-manager.logs'));
     }
@@ -55,8 +55,8 @@ class ServiceProviderTest extends TestCase
     {
         $this->assertTrue(\Route::has('server-manager.servers.index'));
         $this->assertTrue(\Route::has('server-manager.servers.connect'));
-        $this->assertTrue(\Route::has('server-manager.deployments.index'));
-        $this->assertTrue(\Route::has('server-manager.deployments.deploy'));
+        $this->assertTrue(\Route::has('server-manager.terminal.create'));
+        $this->assertTrue(\Route::has('server-manager.terminal.execute'));
         $this->assertTrue(\Route::has('server-manager.logs.index'));
         $this->assertTrue(\Route::has('server-manager.logs.read'));
     }
@@ -69,12 +69,12 @@ class ServiceProviderTest extends TestCase
         $this->assertFalse($provider->isDeferred());
     }
 
-    public function test_deployment_service_has_ssh_dependency()
+    public function test_terminal_service_has_ssh_dependency()
     {
-        $deploymentService = $this->app->make(DeploymentService::class);
+        $terminalService = $this->app->make(TerminalService::class);
         
         // Use reflection to check if SshService is injected
-        $reflection = new \ReflectionClass($deploymentService);
+        $reflection = new \ReflectionClass($terminalService);
         $constructor = $reflection->getConstructor();
         $parameters = $constructor->getParameters();
         
