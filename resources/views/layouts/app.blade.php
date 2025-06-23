@@ -30,10 +30,6 @@
                            class="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 px-3 py-2 rounded-md text-sm font-medium">
                             <i class="fas fa-rocket mr-1"></i> Deployments
                         </a>
-                        <a href="{{ route('server-manager.logs.index') }}" 
-                           class="text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 px-3 py-2 rounded-md text-sm font-medium">
-                            <i class="fas fa-file-alt mr-1"></i> Logs
-                        </a>
                     </div>
                 </div>
             </div>
@@ -46,14 +42,18 @@
     </div>
 
     <script>
-        import axios from 'axios';
-        // Set up CSRF token for axios
-        window.axios = axios;
-        window.axios.defaults.headers.common['X-Requested-With'] = 'XMLHttpRequest';
-        let token = document.head.querySelector('meta[name="csrf-token"]');
-        if (token) {
-            window.axios.defaults.headers.common['X-CSRF-TOKEN'] = token.content;
-        }
+        // Ensure CSRF token is accessible globally
+        window.getCsrfToken = function() {
+            const token = document.head.querySelector('meta[name="csrf-token"]');
+            return token ? token.content : '';
+        };
+        
+        // Set CSRF token for fetch requests
+        window.defaultHeaders = {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': window.getCsrfToken()
+        };
     </script>
     @stack('scripts')
 </body>
