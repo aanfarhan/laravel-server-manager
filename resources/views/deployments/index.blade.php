@@ -143,7 +143,7 @@ function deploymentManager() {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                        'X-CSRF-TOKEN': window.getCsrfToken()
                     },
                     body: JSON.stringify(deploymentData)
                 });
@@ -174,7 +174,7 @@ function deploymentManager() {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
+                        'X-CSRF-TOKEN': window.getCsrfToken()
                     },
                     body: JSON.stringify({
                         deploy_path: this.deployment.deploy_path,

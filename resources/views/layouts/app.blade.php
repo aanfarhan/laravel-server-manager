@@ -42,17 +42,30 @@
     </div>
 
     <script>
-        // Ensure CSRF token is accessible globally
+        // Centralized CSRF token management
         window.getCsrfToken = function() {
             const token = document.head.querySelector('meta[name="csrf-token"]');
-            return token ? token.content : '';
+            if (!token) {
+                console.error('CSRF token not found in meta tag');
+                return '';
+            }
+            return token.content;
         };
         
-        // Set CSRF token for fetch requests
-        window.defaultHeaders = {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN': window.getCsrfToken()
+        // Helper function to get default headers with fresh CSRF token
+        window.getDefaultHeaders = function() {
+            return {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': window.getCsrfToken()
+            };
+        };
+        
+        // Debug function to check CSRF token
+        window.debugCsrfToken = function() {
+            const token = window.getCsrfToken();
+            console.log('CSRF Token:', token ? 'Found (' + token.substring(0, 10) + '...)' : 'NOT FOUND');
+            return token;
         };
     </script>
     @stack('scripts')

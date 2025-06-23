@@ -133,10 +133,7 @@ function serverManager() {
             try {
                 const response = await fetch('{{ route("server-manager.servers.test") }}', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
+                    headers: window.getDefaultHeaders(),
                     body: JSON.stringify({ server_id: serverId })
                 });
                 
@@ -151,10 +148,7 @@ function serverManager() {
             try {
                 const response = await fetch('{{ route("server-manager.servers.connect") }}', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
+                    headers: window.getDefaultHeaders(),
                     body: JSON.stringify({ server_id: serverId })
                 });
                 
@@ -178,10 +172,7 @@ function serverManager() {
             try {
                 const response = await fetch(`/server-manager/servers/${serverId}`, {
                     method: 'DELETE',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    }
+                    headers: window.getDefaultHeaders()
                 });
                 
                 const result = await response.json();

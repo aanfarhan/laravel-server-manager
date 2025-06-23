@@ -498,10 +498,7 @@ function serverDetails() {
             try {
                 const response = await fetch('{{ route("server-manager.servers.test") }}', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
+                    headers: window.getDefaultHeaders(),
                     body: JSON.stringify({ server_id: {{ $server->id }} })
                 });
                 
@@ -522,10 +519,7 @@ function serverDetails() {
             try {
                 const response = await fetch('{{ route("server-manager.servers.connect") }}', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
+                    headers: window.getDefaultHeaders(),
                     body: JSON.stringify({ server_id: {{ $server->id }} })
                 });
                 
@@ -552,10 +546,7 @@ function serverDetails() {
                 
                 const response = await fetch('{{ route("server-manager.servers.disconnect") }}', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    }
+                    headers: window.getDefaultHeaders()
                 });
                 
                 const result = await response.json();
@@ -725,10 +716,7 @@ function serverDetails() {
             try {
                 const response = await fetch('{{ route("server-manager.logs.clear") }}', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
+                    headers: window.getDefaultHeaders(),
                     body: JSON.stringify({ 
                         path: this.selectedLogPath,
                         server_id: {{ $server->id }}
@@ -752,10 +740,7 @@ function serverDetails() {
             try {
                 const response = await fetch('{{ route("server-manager.logs.rotate") }}', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content
-                    },
+                    headers: window.getDefaultHeaders(),
                     body: JSON.stringify({ 
                         path: this.selectedLogPath,
                         server_id: {{ $server->id }}
