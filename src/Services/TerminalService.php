@@ -42,10 +42,12 @@ class TerminalService
             }
 
             // Store session information in cache (persistent across requests)
+            // Note: We can't store SSH connection objects, so we store connection config instead
             $sessionData = [
                 'server_id' => $server->id,
                 'server_name' => $server->name,
-                'shell' => $shell,
+                'ssh_config' => $config, // Store SSH config for reconnection
+                'shell_id' => $shell, // Store shell ID, not the shell object
                 'created_at' => now(),
                 'last_activity' => now(),
                 'is_active' => true
@@ -103,8 +105,17 @@ class TerminalService
             $session['last_activity'] = now();
             Cache::put($this->cachePrefix . $sessionId, $session, now()->addHours(1));
 
-            // Execute command via SSH shell
-            $output = $this->sshService->executeInShell($session['shell'], $command);
+            // Reconnect to SSH if needed (connections don't persist across requests)
+            if (!$this->sshService->isConnected()) {
+                $connected = $this->sshService->connect($session['ssh_config']);
+                if (!$connected) {
+                    throw new \Exception('Failed to reconnect to SSH');
+                }
+            }
+
+            // Execute command directly (stateless approach)
+            $result = $this->sshService->execute($command);
+            $output = $result['output'];
 
             Log::debug("Command executed in terminal", [
                 'session_id' => $sessionId,
@@ -151,8 +162,21 @@ class TerminalService
             $session['last_activity'] = now();
             Cache::put($this->cachePrefix . $sessionId, $session, now()->addHours(1));
 
-            // Send input to shell
-            $output = $this->sshService->sendToShell($session['shell'], $input);
+            // Reconnect to SSH if needed (connections don't persist across requests)
+            if (!$this->sshService->isConnected()) {
+                $connected = $this->sshService->connect($session['ssh_config']);
+                if (!$connected) {
+                    throw new \Exception('Failed to reconnect to SSH');
+                }
+            }
+
+            // In stateless mode, input is treated as a command
+            if (trim($input)) {
+                $result = $this->sshService->execute(trim($input));
+                $output = $result['output'];
+            } else {
+                $output = '';
+            }
 
             return [
                 'success' => true,
@@ -187,8 +211,17 @@ class TerminalService
                 throw new \Exception('Terminal session is not active');
             }
 
-            // Get any pending output from shell
-            $output = $this->sshService->readFromShell($session['shell']);
+            // Reconnect to SSH if needed (connections don't persist across requests)
+            if (!$this->sshService->isConnected()) {
+                $connected = $this->sshService->connect($session['ssh_config']);
+                if (!$connected) {
+                    throw new \Exception('Failed to reconnect to SSH');
+                }
+            }
+
+            // For now, return empty output since we can't maintain shell state across requests
+            // This is a limitation of the stateless HTTP model
+            $output = '';
 
             return [
                 'success' => true,
@@ -219,10 +252,8 @@ class TerminalService
                 ];
             }
 
-            // Close shell if active
-            if (isset($session['shell'])) {
-                $this->sshService->closeShell($session['shell']);
-            }
+            // In stateless mode, we just disconnect the SSH connection
+            $this->sshService->disconnect();
 
             // Remove from cache
             Cache::forget($this->cachePrefix . $sessionId);
@@ -366,8 +397,8 @@ class TerminalService
                 throw new \Exception('Terminal session is not active');
             }
 
-            // Resize the terminal
-            $this->sshService->resizeShell($session['shell'], $rows, $cols);
+            // In stateless mode, resize is just a no-op (could be stored as preference)
+            // We don't have persistent shell to resize
 
             return [
                 'success' => true,
