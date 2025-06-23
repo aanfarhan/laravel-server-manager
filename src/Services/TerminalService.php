@@ -4,11 +4,12 @@ namespace ServerManager\LaravelServerManager\Services;
 
 use ServerManager\LaravelServerManager\Models\Server;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class TerminalService
 {
     protected SshService $sshService;
-    protected array $activeSessions = [];
+    protected string $cachePrefix = 'terminal_session_';
 
     public function __construct(SshService $sshService)
     {
@@ -40,8 +41,8 @@ class TerminalService
                 throw new \Exception('Failed to create shell session');
             }
 
-            // Store session information
-            $this->activeSessions[$sessionId] = [
+            // Store session information in cache (persistent across requests)
+            $sessionData = [
                 'server_id' => $server->id,
                 'server_name' => $server->name,
                 'shell' => $shell,
@@ -49,6 +50,13 @@ class TerminalService
                 'last_activity' => now(),
                 'is_active' => true
             ];
+            
+            Cache::put($this->cachePrefix . $sessionId, $sessionData, now()->addHours(1));
+            
+            // Track this session ID
+            $sessionIds = Cache::get('terminal_session_ids', []);
+            $sessionIds[] = $sessionId;
+            Cache::put('terminal_session_ids', $sessionIds, now()->addHours(1));
 
             Log::info("Terminal session created", [
                 'session_id' => $sessionId,
@@ -82,18 +90,18 @@ class TerminalService
     public function executeCommand(string $sessionId, string $command): array
     {
         try {
-            if (!isset($this->activeSessions[$sessionId])) {
+            $session = Cache::get($this->cachePrefix . $sessionId);
+            if (!$session) {
                 throw new \Exception('Terminal session not found or expired');
             }
-
-            $session = $this->activeSessions[$sessionId];
             
             if (!$session['is_active']) {
                 throw new \Exception('Terminal session is not active');
             }
 
-            // Update last activity
-            $this->activeSessions[$sessionId]['last_activity'] = now();
+            // Update last activity in cache
+            $session['last_activity'] = now();
+            Cache::put($this->cachePrefix . $sessionId, $session, now()->addHours(1));
 
             // Execute command via SSH shell
             $output = $this->sshService->executeInShell($session['shell'], $command);
@@ -130,18 +138,18 @@ class TerminalService
     public function sendInput(string $sessionId, string $input): array
     {
         try {
-            if (!isset($this->activeSessions[$sessionId])) {
+            $session = Cache::get($this->cachePrefix . $sessionId);
+            if (!$session) {
                 throw new \Exception('Terminal session not found or expired');
             }
-
-            $session = $this->activeSessions[$sessionId];
             
             if (!$session['is_active']) {
                 throw new \Exception('Terminal session is not active');
             }
 
-            // Update last activity
-            $this->activeSessions[$sessionId]['last_activity'] = now();
+            // Update last activity in cache
+            $session['last_activity'] = now();
+            Cache::put($this->cachePrefix . $sessionId, $session, now()->addHours(1));
 
             // Send input to shell
             $output = $this->sshService->sendToShell($session['shell'], $input);
@@ -170,11 +178,10 @@ class TerminalService
     public function getOutput(string $sessionId): array
     {
         try {
-            if (!isset($this->activeSessions[$sessionId])) {
+            $session = Cache::get($this->cachePrefix . $sessionId);
+            if (!$session) {
                 throw new \Exception('Terminal session not found or expired');
             }
-
-            $session = $this->activeSessions[$sessionId];
             
             if (!$session['is_active']) {
                 throw new \Exception('Terminal session is not active');
@@ -204,25 +211,26 @@ class TerminalService
     public function closeSession(string $sessionId): array
     {
         try {
-            if (!isset($this->activeSessions[$sessionId])) {
+            $session = Cache::get($this->cachePrefix . $sessionId);
+            if (!$session) {
                 return [
                     'success' => true,
                     'message' => 'Session already closed or not found'
                 ];
             }
 
-            $session = $this->activeSessions[$sessionId];
-
             // Close shell if active
             if (isset($session['shell'])) {
                 $this->sshService->closeShell($session['shell']);
             }
 
-            // Mark session as inactive
-            $this->activeSessions[$sessionId]['is_active'] = false;
-
-            // Remove from active sessions
-            unset($this->activeSessions[$sessionId]);
+            // Remove from cache
+            Cache::forget($this->cachePrefix . $sessionId);
+            
+            // Remove from session IDs tracking
+            $sessionIds = Cache::get('terminal_session_ids', []);
+            $sessionIds = array_filter($sessionIds, fn($id) => $id !== $sessionId);
+            Cache::put('terminal_session_ids', $sessionIds, now()->addHours(1));
 
             Log::info("Terminal session closed", [
                 'session_id' => $sessionId,
@@ -252,14 +260,13 @@ class TerminalService
      */
     public function getSessionInfo(string $sessionId): array
     {
-        if (!isset($this->activeSessions[$sessionId])) {
+        $session = Cache::get($this->cachePrefix . $sessionId);
+        if (!$session) {
             return [
                 'success' => false,
                 'message' => 'Session not found'
             ];
         }
-
-        $session = $this->activeSessions[$sessionId];
 
         return [
             'success' => true,
@@ -281,15 +288,26 @@ class TerminalService
     {
         $sessions = [];
         
-        foreach ($this->activeSessions as $sessionId => $session) {
-            $sessions[] = [
-                'id' => $sessionId,
-                'server_id' => $session['server_id'],
-                'server_name' => $session['server_name'],
-                'created_at' => $session['created_at']->toISOString(),
-                'last_activity' => $session['last_activity']->toISOString(),
-                'is_active' => $session['is_active']
-            ];
+        // For simplicity, we'll track session IDs separately in cache
+        // This is not perfect but works for most use cases
+        $sessionIds = Cache::get('terminal_session_ids', []);
+        
+        foreach ($sessionIds as $sessionId) {
+            $session = Cache::get($this->cachePrefix . $sessionId);
+            if ($session && $session['is_active']) {
+                $sessions[] = [
+                    'id' => $sessionId,
+                    'server_id' => $session['server_id'],
+                    'server_name' => $session['server_name'],
+                    'created_at' => $session['created_at']->toISOString(),
+                    'last_activity' => $session['last_activity']->toISOString(),
+                    'is_active' => $session['is_active']
+                ];
+            } else if (!$session) {
+                // Clean up orphaned session ID
+                $sessionIds = array_filter($sessionIds, fn($id) => $id !== $sessionId);
+                Cache::put('terminal_session_ids', $sessionIds, now()->addHours(1));
+            }
         }
 
         return [
@@ -306,8 +324,16 @@ class TerminalService
     {
         $expiredCount = 0;
         $timeout = config('server-manager.terminal.session_timeout', 3600); // 1 hour default
+        $sessionIds = Cache::get('terminal_session_ids', []);
         
-        foreach ($this->activeSessions as $sessionId => $session) {
+        foreach ($sessionIds as $sessionId) {
+            $session = Cache::get($this->cachePrefix . $sessionId);
+            if (!$session) {
+                // Session already expired from cache
+                $expiredCount++;
+                continue;
+            }
+            
             $inactiveTime = now()->diffInSeconds($session['last_activity']);
             
             if ($inactiveTime > $timeout) {
@@ -331,11 +357,10 @@ class TerminalService
     public function resizeTerminal(string $sessionId, int $rows, int $cols): array
     {
         try {
-            if (!isset($this->activeSessions[$sessionId])) {
+            $session = Cache::get($this->cachePrefix . $sessionId);
+            if (!$session) {
                 throw new \Exception('Terminal session not found or expired');
             }
-
-            $session = $this->activeSessions[$sessionId];
             
             if (!$session['is_active']) {
                 throw new \Exception('Terminal session is not active');
