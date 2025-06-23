@@ -880,10 +880,15 @@ function serverDetails() {
                     // Initialize xterm.js
                     await this.initializeTerminal();
                     
+                    // Display initial prompt if provided
+                    if (result.initial_output && this.terminal) {
+                        this.terminal.write(result.initial_output);
+                    }
+                    
                     // Wait a bit more before starting polling to let backend establish session
                     await new Promise(resolve => setTimeout(resolve, 1000));
                     
-                    // Start output polling
+                    // Start output polling (less aggressive since we have interactive input now)
                     this.startOutputPolling();
                     
                     // Use a non-blocking notification instead of alert
@@ -1006,10 +1011,6 @@ function serverDetails() {
             // Mount terminal
             this.terminal.open(container);
             this.xtermLoaded = true;
-            
-            // Welcome message
-            this.terminal.writeln('\r\n\x1b[1;32mTerminal session started for {{ $server->name }}\x1b[0m');
-            this.terminal.writeln('Type commands below. Use Ctrl+C to interrupt commands.\r\n');
         },
 
         async sendTerminalInput(data) {
@@ -1072,7 +1073,7 @@ function serverDetails() {
                     }
                     this.pollAttempts++;
                 }
-            }, 500); // Poll every 500ms
+            }, 2000); // Poll every 2 seconds (less aggressive since we have interactive input)
         },
 
         stopOutputPolling() {

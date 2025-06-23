@@ -42,15 +42,16 @@ class TerminalService
             }
 
             // Store session information in cache (persistent across requests)
-            // Note: We can't store SSH connection objects, so we store connection config instead
             $sessionData = [
                 'server_id' => $server->id,
                 'server_name' => $server->name,
                 'ssh_config' => $config, // Store SSH config for reconnection
-                'shell_id' => $shell, // Store shell ID, not the shell object
                 'created_at' => now(),
                 'last_activity' => now(),
-                'is_active' => true
+                'is_active' => true,
+                'current_path' => '~', // Track current directory
+                'command_buffer' => '', // Track current command being typed
+                'prompt' => ($config['username'] ?? 'user') . '@' . $server->name . ':~$ ' // Current prompt
             ];
             
             Cache::put($this->cachePrefix . $sessionId, $sessionData, now()->addHours(1));
@@ -70,7 +71,8 @@ class TerminalService
                 'success' => true,
                 'session_id' => $sessionId,
                 'server_name' => $server->name,
-                'message' => "Terminal session connected to {$server->name}"
+                'message' => "Terminal session connected to {$server->name}",
+                'initial_output' => "Welcome to " . $server->name . "\r\n" . $sessionData['prompt']
             ];
 
         } catch (\Exception $e) {
@@ -170,13 +172,8 @@ class TerminalService
                 }
             }
 
-            // In stateless mode, input is treated as a command
-            if (trim($input)) {
-                $result = $this->sshService->execute(trim($input));
-                $output = $result['output'];
-            } else {
-                $output = '';
-            }
+            // Handle terminal input character by character (like a real PTY)
+            $output = $this->processTerminalInput($sessionId, $input, $session);
 
             return [
                 'success' => true,
@@ -380,6 +377,124 @@ class TerminalService
         }
 
         return $expiredCount;
+    }
+
+    /**
+     * Process terminal input character by character (like a real PTY)
+     */
+    private function processTerminalInput(string $sessionId, string $input, array $session): string
+    {
+        $output = '';
+        
+        foreach (str_split($input) as $char) {
+            $charCode = ord($char);
+            
+            switch ($charCode) {
+                case 13: // Enter key (CR)
+                case 10: // Line feed (LF)
+                    // Execute the command
+                    $command = trim($session['command_buffer']);
+                    $output .= "\r\n"; // New line
+                    
+                    if (!empty($command)) {
+                        // Execute command via SSH
+                        if ($this->sshService->isConnected()) {
+                            $result = $this->sshService->execute($command);
+                            $output .= $result['output'];
+                            
+                            // Update current directory if cd command
+                            if (strpos($command, 'cd ') === 0) {
+                                $newPath = $this->getUpdatedPath($session['current_path'], $command);
+                                $session['current_path'] = $newPath;
+                                $session['prompt'] = $this->buildPrompt($session, $newPath);
+                            }
+                        } else {
+                            $output .= "Error: SSH connection lost\r\n";
+                        }
+                    }
+                    
+                    // Reset command buffer and show new prompt
+                    $session['command_buffer'] = '';
+                    $output .= $session['prompt'];
+                    break;
+                    
+                case 127: // Backspace/Delete
+                case 8:   // Backspace
+                    if (!empty($session['command_buffer'])) {
+                        // Remove last character from buffer
+                        $session['command_buffer'] = substr($session['command_buffer'], 0, -1);
+                        // Send backspace sequence to terminal
+                        $output .= "\x08 \x08"; // Backspace, space, backspace
+                    }
+                    break;
+                    
+                case 3: // Ctrl+C
+                    $output .= "^C\r\n" . $session['prompt'];
+                    $session['command_buffer'] = '';
+                    break;
+                    
+                case 4: // Ctrl+D (EOF)
+                    if (empty($session['command_buffer'])) {
+                        $output .= "exit\r\n";
+                        // Could mark session as closed here
+                    }
+                    break;
+                    
+                default:
+                    // Regular character - add to buffer and echo
+                    if ($charCode >= 32 && $charCode <= 126) { // Printable ASCII
+                        $session['command_buffer'] .= $char;
+                        $output .= $char; // Echo the character
+                    }
+                    break;
+            }
+        }
+        
+        // Update session in cache
+        $session['last_activity'] = now();
+        Cache::put($this->cachePrefix . $sessionId, $session, now()->addHours(1));
+        
+        return $output;
+    }
+    
+    /**
+     * Build prompt string
+     */
+    private function buildPrompt(array $session, string $currentPath): string
+    {
+        $server = $session['server_name'];
+        $user = $session['ssh_config']['username'] ?? 'user';
+        return "{$user}@{$server}:{$currentPath}$ ";
+    }
+    
+    /**
+     * Get updated path after cd command
+     */
+    private function getUpdatedPath(string $currentPath, string $command): string
+    {
+        if (preg_match('/^cd\s+(.+)$/', $command, $matches)) {
+            $newPath = trim($matches[1]);
+            
+            if ($newPath === '~' || $newPath === '') {
+                return '~';
+            } elseif ($newPath === '..') {
+                // Go up one directory
+                if ($currentPath === '~') {
+                    return '~';
+                }
+                $parts = explode('/', $currentPath);
+                array_pop($parts);
+                return empty($parts) ? '/' : implode('/', $parts);
+            } elseif (strpos($newPath, '/') === 0) {
+                // Absolute path
+                return $newPath;
+            } else {
+                // Relative path
+                return $currentPath === '~' ? "~/{$newPath}" : "{$currentPath}/{$newPath}";
+            }
+        }
+        
+        return $currentPath;
     }
 
     /**

@@ -47,10 +47,10 @@ class TerminalServiceTest extends TestCase
 
     public function test_create_session_success()
     {
-        $server = Mockery::mock(Server::class);
-        $server->shouldReceive('getSshConfig')->andReturn(['host' => 'test.example.com']);
-        $server->shouldReceive('getAttribute')->with('id')->andReturn(1);
-        $server->shouldReceive('getAttribute')->with('name')->andReturn('Test Server');
+        $server = Mockery::mock(Server::class)->makePartial();
+        $server->shouldReceive('getSshConfig')->andReturn(['host' => 'test.example.com', 'username' => 'testuser']);
+        $server->id = 1;
+        $server->name = 'Test Server';
 
         $this->mockSshService
             ->shouldReceive('connect')
