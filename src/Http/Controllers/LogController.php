@@ -30,16 +30,20 @@ class LogController extends Controller
     protected function ensureConnection(): void
     {
         if (!$this->sshService->isConnected()) {
-            // Get connected server from session
+            // Get connected server from session first
             $serverId = session('connected_server_id');
             
+            // If no session server, try to find any connected server
             if (!$serverId) {
-                throw new \Exception('SSH connection required');
+                $server = Server::where('status', 'connected')->first();
+                if (!$server) {
+                    throw new \Exception('SSH connection required');
+                }
+            } else {
+                $server = Server::findOrFail($serverId);
             }
             
-            $server = Server::findOrFail($serverId);
-            
-            // Attempt to reconnect
+            // Attempt to connect
             $config = $server->getSshConfig();
             $connected = $this->sshService->connect($config);
             
@@ -49,6 +53,11 @@ class LogController extends Controller
             }
             
             $server->updateConnectionStatus('connected');
+            
+            // Set session if it wasn't already set
+            if (!session('connected_server_id')) {
+                session(['connected_server_id' => $server->id]);
+            }
         }
     }
 

@@ -575,4 +575,57 @@ class LogControllerTest extends TestCase
             ]
         ]);
     }
+
+    public function test_files_connects_to_available_server_when_no_session()
+    {
+        // Create a connected server but NO session (this is the user's scenario)
+        $server = \ServerManager\LaravelServerManager\Models\Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass',
+            'status' => 'connected'
+        ]);
+
+        // No session set - this is the key difference from the previous test
+        // session(['connected_server_id' => $server->id]); // Not set!
+
+        // Mock SSH service as not connected initially
+        $this->mockSshService
+            ->shouldReceive('isConnected')
+            ->once()
+            ->andReturn(false);
+
+        // Mock auto-connect attempt to available connected server
+        $this->mockSshService
+            ->shouldReceive('connect')
+            ->once()
+            ->with(Mockery::on(function($config) {
+                return $config['host'] === 'test.example.com' && 
+                       $config['username'] === 'testuser';
+            }))
+            ->andReturn(true);
+
+        // Mock successful log files retrieval after connect
+        $this->mockLogService
+            ->shouldReceive('getLogFiles')
+            ->once()
+            ->with('/var/log')
+            ->andReturn([
+                'success' => true,
+                'files' => [
+                    ['path' => '/var/log/test.log', 'size' => '1.2MB', 'modified' => '2024-01-01 12:00:00']
+                ]
+            ]);
+
+        $response = $this->getJson(route('server-manager.logs.files'));
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'files' => [
+                ['path' => '/var/log/test.log', 'size' => '1.2MB', 'modified' => '2024-01-01 12:00:00']
+            ]
+        ]);
+    }
 }
