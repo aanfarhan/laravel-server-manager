@@ -4,6 +4,30 @@
 
 @section('content')
 <div x-data="serverDetails()" class="space-y-6">
+    <!-- Notification Toast -->
+    <div x-show="notification.show" 
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0 transform translate-y-2"
+         x-transition:enter-end="opacity-100 transform translate-y-0"
+         x-transition:leave="transition ease-in duration-200"
+         x-transition:leave-start="opacity-100 transform translate-y-0"
+         x-transition:leave-end="opacity-0 transform translate-y-2"
+         class="fixed top-4 right-4 z-50 max-w-sm w-full">
+        <div :class="notification.type === 'success' ? 'bg-green-500' : notification.type === 'error' ? 'bg-red-500' : 'bg-blue-500'"
+             class="rounded-lg shadow-lg p-4 text-white">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <i :class="notification.type === 'success' ? 'fas fa-check-circle' : notification.type === 'error' ? 'fas fa-exclamation-circle' : 'fas fa-info-circle'"
+                       class="mr-3"></i>
+                    <span x-text="notification.message" class="text-sm font-medium"></span>
+                </div>
+                <button @click="hideNotification()" class="ml-4 text-white hover:text-gray-200">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Header -->
     <div class="bg-white dark:bg-gray-800 shadow rounded-lg">
         <div class="px-4 py-5 sm:px-6 flex justify-between items-center">
@@ -542,6 +566,13 @@ function serverDetails() {
         xtermLoaded: false,
         terminal: null,
         outputPollingInterval: null,
+        
+        // Notification system
+        notification: {
+            show: false,
+            message: '',
+            type: 'success' // 'success', 'error', 'info'
+        },
 
         async testConnection() {
             this.loading = true;
@@ -839,18 +870,25 @@ function serverDetails() {
                     this.terminalSession = result.session_id;
                     this.terminalConnected = true;
                     
+                    // Wait for DOM to update (x-show to take effect)
+                    await this.$nextTick();
+                    
+                    // Add a small delay to ensure the container is visible
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
                     // Initialize xterm.js
                     await this.initializeTerminal();
                     
                     // Start output polling
                     this.startOutputPolling();
                     
-                    alert('✅ Terminal session started!');
+                    // Use a non-blocking notification instead of alert
+                    this.showNotification('✅ Terminal session started!', 'success');
                 } else {
-                    alert('❌ Failed to start terminal: ' + result.message);
+                    this.showNotification('❌ Failed to start terminal: ' + result.message, 'error');
                 }
             } catch (error) {
-                alert('❌ Failed to start terminal: ' + error.message);
+                this.showNotification('❌ Failed to start terminal: ' + error.message, 'error');
             }
             this.terminalLoading = false;
         },
@@ -924,7 +962,16 @@ function serverDetails() {
 
         createTerminalInstance() {
             const container = document.getElementById('terminal-container');
-            if (!container) return;
+            if (!container) {
+                console.error('Terminal container not found');
+                return;
+            }
+            
+            // Check if container is visible
+            if (container.offsetParent === null) {
+                console.error('Terminal container is not visible');
+                return;
+            }
             
             // Clear container
             container.innerHTML = '';
@@ -1032,6 +1079,21 @@ function serverDetails() {
             if (container) {
                 container.innerHTML = '';
             }
+        },
+
+        showNotification(message, type = 'success') {
+            this.notification.message = message;
+            this.notification.type = type;
+            this.notification.show = true;
+            
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                this.notification.show = false;
+            }, 3000);
+        },
+
+        hideNotification() {
+            this.notification.show = false;
         },
 
         init() {
