@@ -78,18 +78,7 @@ class ServerRequest extends FormRequest
 
     protected function passedValidation(): void
     {
-        // For updates, remove empty credential fields to preserve existing ones
-        if ($this->isMethod('put') || $this->isMethod('patch')) {
-            $data = $this->all();
-            
-            if ($this->input('auth_type') === 'password' && empty($this->input('password'))) {
-                unset($data['password']);
-            } elseif ($this->input('auth_type') === 'key' && empty($this->input('private_key'))) {
-                unset($data['private_key']);
-                unset($data['private_key_password']);
-            }
-            
-            $this->replace($data);
-        }
+        // This method is now simplified since credential preservation 
+        // is handled in the controller for better control
     }
 }

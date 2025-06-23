@@ -383,6 +383,10 @@ function serverDetails() {
 
         async disconnectFromServer() {
             try {
+                // Immediately update UI state to provide instant feedback
+                this.connected = false;
+                this.status = {};
+                
                 const response = await fetch('{{ route("server-manager.servers.disconnect") }}', {
                     method: 'POST',
                     headers: {
@@ -394,14 +398,19 @@ function serverDetails() {
                 const result = await response.json();
                 
                 if (response.ok && result.success) {
-                    this.connected = false;
-                    this.status = {};
                     alert('✅ Disconnected successfully');
-                    location.reload();
+                    // Add a small delay to ensure server state is updated before reload
+                    setTimeout(() => {
+                        location.reload();
+                    }, 500);
                 } else {
+                    // Revert UI state if disconnect failed
+                    this.connected = true;
                     alert('❌ Disconnect failed: ' + (result.message || 'Unknown error'));
                 }
             } catch (error) {
+                // Revert UI state if disconnect failed
+                this.connected = true;
                 alert('❌ Disconnect failed: ' + error.message);
             }
         },

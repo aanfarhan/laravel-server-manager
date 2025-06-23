@@ -877,4 +877,112 @@ class ServerControllerTest extends TestCase
         $this->assertNull($server->password);
         $this->assertEquals('test-private-key-content', $server->private_key);
     }
+
+    // TDD Tests for User-Reported Bugs
+    public function test_edit_server_without_changes_preserves_ssh_connection()
+    {
+        // Exact user scenario: Create server with password auth
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'original_password'
+        ]);
+
+        // Verify password is encrypted and works
+        $this->assertNotEquals('original_password', $server->getAttributes()['password']);
+        $this->assertEquals('original_password', $server->password);
+
+        // User clicks edit button, then update button WITHOUT changing anything
+        // This simulates the EXACT form data that would be sent by the JavaScript form
+        $updateData = [
+            'name' => 'Test Server',  // Same values as original
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'port' => 22,
+            'auth_type' => 'password',
+            'password' => '',  // Form sends empty string, not missing field!
+            'private_key' => '',
+            'private_key_password' => ''
+        ];
+
+        $response = $this->putJson(route('server-manager.servers.update', $server), $updateData);
+        $response->assertStatus(200);
+
+        // After update, SSH connection should still work
+        $server->refresh();
+        
+        // Password should be preserved when not provided in update
+        $this->assertEquals('original_password', $server->password, 'Password should be preserved when not provided in update');
+        
+        // Test that SSH config still works
+        $sshConfig = $server->getSshConfig();
+        $this->assertEquals('original_password', $sshConfig['password'], 'SSH config password should work after update');
+
+        // Test actual SSH connection
+        $this->mockSshService
+            ->shouldReceive('connect')
+            ->once()
+            ->with(Mockery::on(function($config) {
+                return isset($config['password']) && 
+                       $config['password'] === 'original_password' &&
+                       $config['host'] === 'test.example.com';
+            }))
+            ->andReturn(true);
+
+        $connectResponse = $this->postJson(route('server-manager.servers.connect'), [
+            'server_id' => $server->id
+        ]);
+
+        $connectResponse->assertStatus(200);
+        $connectResponse->assertJson(['success' => true]);
+    }
+
+    public function test_disconnect_button_properly_updates_ui_state()
+    {
+        // Create a connected server
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass',
+            'status' => 'connected'
+        ]);
+
+        // Set session to simulate connected state
+        session(['connected_server_id' => $server->id]);
+
+        // Mock the SSH service disconnect
+        $this->mockSshService
+            ->shouldReceive('disconnect')
+            ->once();
+
+        // Test the exact disconnect endpoint that the UI calls
+        $response = $this->postJson(route('server-manager.servers.disconnect'), [], [
+            'Content-Type' => 'application/json',
+            'X-CSRF-TOKEN' => csrf_token()
+        ]);
+
+        // Should return success
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'message' => 'Disconnected successfully'
+        ]);
+
+        // Verify session was cleared (this is what makes UI update)
+        $this->assertNull(session('connected_server_id'));
+        
+        // Verify server status was updated in database
+        $server->refresh();
+        $this->assertEquals('disconnected', $server->status);
+
+        // Test that a subsequent status check returns disconnected
+        $statusResponse = $this->getJson(route('server-manager.servers.status'));
+        $statusResponse->assertStatus(400); // Should fail because no server connected
+        $statusResponse->assertJson([
+            'success' => false,
+            'message' => 'No server connected'
+        ]);
+    }
 }
