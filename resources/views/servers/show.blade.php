@@ -566,6 +566,7 @@ function serverDetails() {
         xtermLoaded: false,
         terminal: null,
         outputPollingInterval: null,
+        pollAttempts: 0,
         
         // Notification system
         notification: {
@@ -879,6 +880,9 @@ function serverDetails() {
                     // Initialize xterm.js
                     await this.initializeTerminal();
                     
+                    // Wait a bit more before starting polling to let backend establish session
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
                     // Start output polling
                     this.startOutputPolling();
                     
@@ -911,6 +915,7 @@ function serverDetails() {
             this.destroyTerminal();
             this.terminalSession = null;
             this.terminalConnected = false;
+            this.pollAttempts = 0; // Reset poll attempts
         },
 
         async executeCommand() {
@@ -1034,6 +1039,9 @@ function serverDetails() {
                 clearInterval(this.outputPollingInterval);
             }
             
+            this.pollAttempts = 0; // Reset poll attempts counter
+            const maxGraceAttempts = 10; // Grace period: 10 attempts (5 seconds)
+            
             this.outputPollingInterval = setInterval(async () => {
                 if (!this.terminalSession) return;
                 
@@ -1046,11 +1054,23 @@ function serverDetails() {
                         this.terminal.write(result.output);
                     }
                     
-                    if (!result.session_active) {
+                    // Only auto-close if session is inactive AND we're past the grace period
+                    if (!result.session_active && this.pollAttempts >= maxGraceAttempts) {
+                        console.log('Terminal session became inactive after grace period, closing...');
                         this.closeTerminalSession();
+                    } else if (!result.session_active) {
+                        console.log(`Terminal session not yet active, attempt ${this.pollAttempts + 1}/${maxGraceAttempts}`);
                     }
+                    
+                    this.pollAttempts++;
                 } catch (error) {
                     console.error('Output polling failed:', error);
+                    // Don't auto-close on network errors during grace period
+                    if (this.pollAttempts >= maxGraceAttempts) {
+                        console.log('Terminal polling failed consistently, closing session...');
+                        this.closeTerminalSession();
+                    }
+                    this.pollAttempts++;
                 }
             }, 500); // Poll every 500ms
         },
