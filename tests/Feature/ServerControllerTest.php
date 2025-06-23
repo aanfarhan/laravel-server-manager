@@ -985,4 +985,36 @@ class ServerControllerTest extends TestCase
             'message' => 'No server connected'
         ]);
     }
+
+    public function test_status_endpoint_does_not_auto_reconnect_after_manual_disconnect()
+    {
+        // Create a server that was manually disconnected
+        $server = Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass',
+            'status' => 'disconnected' // Manually disconnected
+        ]);
+
+        // Mock SSH service as not connected
+        $this->mockSshService
+            ->shouldReceive('isConnected')
+            ->once()
+            ->andReturn(false);
+
+        // Mock SSH service should NOT attempt reconnection for manually disconnected servers
+        $this->mockSshService
+            ->shouldNotReceive('connect');
+
+        // Test status endpoint with explicit server_id (simulating page reload)
+        $response = $this->getJson(route('server-manager.servers.status', ['server_id' => $server->id]));
+
+        // Should return disconnected status without attempting reconnection
+        $response->assertStatus(400);
+        $response->assertJson([
+            'success' => false,
+            'message' => 'No server connected'
+        ]);
+    }
 }

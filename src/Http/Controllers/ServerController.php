@@ -254,7 +254,16 @@ class ServerController extends Controller
             $server = Server::findOrFail($serverId);
 
             if (!$this->sshService->isConnected()) {
-                // Try to reconnect
+                // If we have an explicit server_id but no session, this is likely after manual disconnect
+                // Don't auto-reconnect in this case to respect user's disconnect action
+                if ($request->server_id && !session('connected_server_id') && $server->status === 'disconnected') {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'No server connected'
+                    ], 400);
+                }
+                
+                // Try to reconnect for connection errors or session-based reconnections
                 $config = $server->getSshConfig();
                 $connected = $this->sshService->connect($config);
                 
