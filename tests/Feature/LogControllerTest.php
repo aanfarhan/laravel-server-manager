@@ -522,4 +522,57 @@ class LogControllerTest extends TestCase
             ]);
         }
     }
+
+    public function test_files_auto_reconnects_when_session_server_available()
+    {
+        // Create a connected server
+        $server = \ServerManager\LaravelServerManager\Models\Server::create([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'username' => 'testuser',
+            'password' => 'testpass',
+            'status' => 'connected'
+        ]);
+
+        // Set session to simulate connected state
+        session(['connected_server_id' => $server->id]);
+
+        // Mock SSH service as not connected initially
+        $this->mockSshService
+            ->shouldReceive('isConnected')
+            ->once()
+            ->andReturn(false);
+
+        // Mock auto-reconnect attempt
+        $this->mockSshService
+            ->shouldReceive('connect')
+            ->once()
+            ->with(Mockery::on(function($config) {
+                return $config['host'] === 'test.example.com' && 
+                       $config['username'] === 'testuser';
+            }))
+            ->andReturn(true);
+
+        // Mock successful log files retrieval after reconnect
+        $this->mockLogService
+            ->shouldReceive('getLogFiles')
+            ->once()
+            ->with('/var/log')
+            ->andReturn([
+                'success' => true,
+                'files' => [
+                    ['path' => '/var/log/test.log', 'size' => '1.2MB', 'modified' => '2024-01-01 12:00:00']
+                ]
+            ]);
+
+        $response = $this->getJson(route('server-manager.logs.files'));
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => true,
+            'files' => [
+                ['path' => '/var/log/test.log', 'size' => '1.2MB', 'modified' => '2024-01-01 12:00:00']
+            ]
+        ]);
+    }
 }

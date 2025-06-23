@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use ServerManager\LaravelServerManager\Services\SshService;
 use ServerManager\LaravelServerManager\Services\LogService;
+use ServerManager\LaravelServerManager\Models\Server;
 
 class LogController extends Controller
 {
@@ -23,12 +24,38 @@ class LogController extends Controller
         return view('server-manager::logs.index');
     }
 
+    /**
+     * Ensure SSH connection is available, attempting auto-reconnect if needed
+     */
+    protected function ensureConnection(): void
+    {
+        if (!$this->sshService->isConnected()) {
+            // Get connected server from session
+            $serverId = session('connected_server_id');
+            
+            if (!$serverId) {
+                throw new \Exception('SSH connection required');
+            }
+            
+            $server = Server::findOrFail($serverId);
+            
+            // Attempt to reconnect
+            $config = $server->getSshConfig();
+            $connected = $this->sshService->connect($config);
+            
+            if (!$connected) {
+                $server->updateConnectionStatus('error', 'Connection lost');
+                throw new \Exception('SSH connection required');
+            }
+            
+            $server->updateConnectionStatus('connected');
+        }
+    }
+
     public function files(Request $request)
     {
         try {
-            if (!$this->sshService->isConnected()) {
-                throw new \Exception('SSH connection required');
-            }
+            $this->ensureConnection();
 
             $directory = $request->get('directory', '/var/log');
             $result = $this->logService->getLogFiles($directory);
@@ -51,9 +78,7 @@ class LogController extends Controller
         ]);
 
         try {
-            if (!$this->sshService->isConnected()) {
-                throw new \Exception('SSH connection required');
-            }
+            $this->ensureConnection();
 
             $lines = $request->get('lines', config('server-manager.logs.default_lines'));
             $result = $this->logService->readLog($request->path, $lines);
@@ -77,9 +102,7 @@ class LogController extends Controller
         ]);
 
         try {
-            if (!$this->sshService->isConnected()) {
-                throw new \Exception('SSH connection required');
-            }
+            $this->ensureConnection();
 
             $lines = $request->get('lines', config('server-manager.logs.default_lines'));
             $result = $this->logService->searchLog($request->path, $request->pattern, $lines);
@@ -102,9 +125,7 @@ class LogController extends Controller
         ]);
 
         try {
-            if (!$this->sshService->isConnected()) {
-                throw new \Exception('SSH connection required');
-            }
+            $this->ensureConnection();
 
             $lines = $request->get('lines', 50);
             $result = $this->logService->tailLog($request->path, $lines);
@@ -126,9 +147,7 @@ class LogController extends Controller
         ]);
 
         try {
-            if (!$this->sshService->isConnected()) {
-                throw new \Exception('SSH connection required');
-            }
+            $this->ensureConnection();
 
             $localPath = storage_path('app/temp/' . basename($request->path) . '_' . time());
             $result = $this->logService->downloadLog($request->path, $localPath);
@@ -154,9 +173,7 @@ class LogController extends Controller
         ]);
 
         try {
-            if (!$this->sshService->isConnected()) {
-                throw new \Exception('SSH connection required');
-            }
+            $this->ensureConnection();
 
             $result = $this->logService->clearLog($request->path);
 
@@ -177,9 +194,7 @@ class LogController extends Controller
         ]);
 
         try {
-            if (!$this->sshService->isConnected()) {
-                throw new \Exception('SSH connection required');
-            }
+            $this->ensureConnection();
 
             $result = $this->logService->rotateLog($request->path);
 
@@ -196,9 +211,7 @@ class LogController extends Controller
     public function errors(Request $request)
     {
         try {
-            if (!$this->sshService->isConnected()) {
-                throw new \Exception('SSH connection required');
-            }
+            $this->ensureConnection();
 
             $logPaths = $request->get('paths', config('server-manager.logs.default_paths'));
             $hours = $request->get('hours', 24);
