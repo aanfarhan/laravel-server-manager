@@ -107,7 +107,9 @@ class SshService
             $this->connection->setTimeout(10);
             
             // Wait for initial prompt to establish shell session
-            $initialOutput = $this->connection->read('$|#|%|>', SSH2::READ_REGEX);
+            // Give it a moment to establish the shell, then read any welcome message
+            usleep(500000); // 500ms delay
+            $initialOutput = $this->connection->read();
 
             $this->shells[$shellId] = [
                 'connection' => $this->connection,
@@ -138,8 +140,9 @@ class SshService
             // Send command to shell
             $shell['connection']->write($command . "\n");
             
-            // Read output until we get a prompt
-            $output = $shell['connection']->read('$|#|%|>', SSH2::READ_REGEX);
+            // Read output - wait a bit then read what's available
+            usleep(200000); // 200ms delay
+            $output = $shell['connection']->read();
             
             // Update buffer with new output
             $this->shells[$shellId]['buffer'] = $output;
@@ -172,10 +175,12 @@ class SshService
             $shell['connection']->setTimeout(2);
             
             try {
-                $output = $shell['connection']->read('$|#|%|>', SSH2::READ_REGEX);
-            } catch (Exception $e) {
-                // If no prompt received, just read what's available
+                // Wait a bit then read available output
+                usleep(100000); // 100ms delay
                 $output = $shell['connection']->read();
+            } catch (Exception $e) {
+                // If read fails, return empty string
+                $output = '';
             }
             
             // Restore original timeout
