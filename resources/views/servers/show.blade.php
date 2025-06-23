@@ -492,26 +492,40 @@
                             </div>
                         </div>
                         
-                        <!-- Terminal Display -->
-                        <div id="terminal-container" class="p-4 min-h-96 max-h-96 overflow-hidden">
-                            <!-- xterm.js will be mounted here -->
+                        <!-- Option 1: Full Web Terminal (iframe-based) -->
+                        <div x-show="useFullTerminal" class="h-96">
+                            <iframe 
+                                :src="fullTerminalUrl" 
+                                class="w-full h-full border-0 bg-black"
+                                style="background: #000;">
+                            </iframe>
                         </div>
-                    </div>
-
-                    <!-- Terminal Input (fallback for non-xterm environments) -->
-                    <div x-show="!xtermLoaded" class="space-y-2">
-                        <div class="flex space-x-2">
-                            <input type="text" 
-                                   x-model="terminalCommand" 
-                                   @keyup.enter="executeCommand()"
-                                   placeholder="Enter command..."
-                                   class="flex-1 border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono">
-                            <button @click="executeCommand()" 
-                                    :disabled="!terminalCommand.trim()"
-                                    class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50">
-                                <i class="fas fa-play mr-2"></i>
-                                Execute
-                            </button>
+                        
+                        <!-- Option 2: Simple Command Interface -->
+                        <div x-show="!useFullTerminal" class="p-4">
+                            <div class="bg-black text-green-400 font-mono text-sm p-4 rounded h-80 overflow-y-auto" 
+                                 id="command-output">
+                                <div x-html="commandHistory"></div>
+                                <div class="flex items-center">
+                                    <span x-text="currentPrompt"></span>
+                                    <input type="text" 
+                                           x-model="currentCommand"
+                                           @keyup.enter="executeSimpleCommand()"
+                                           class="bg-transparent border-0 outline-0 text-green-400 flex-1 ml-1"
+                                           placeholder="Type command...">
+                                </div>
+                            </div>
+                            
+                            <div class="mt-2 text-xs text-gray-500">
+                                <span class="inline-flex items-center">
+                                    <i class="fas fa-info-circle mr-1"></i>
+                                    Simple terminal mode - each command executes independently
+                                </span>
+                                <button @click="switchToFullTerminal()" 
+                                        class="ml-4 text-blue-500 hover:text-blue-700 underline">
+                                    Switch to Full Terminal
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -567,6 +581,16 @@ function serverDetails() {
         terminal: null,
         outputPollingInterval: null,
         pollAttempts: 0,
+        
+        // Terminal modes
+        terminalMode: 'simple',
+        wettyInstance: null,
+        wettyUrl: '',
+        wettyLoaded: false,
+        wettyStatus: null,
+        commandHistory: '',
+        currentCommand: '',
+        currentPrompt: 'user@server:~$ ',
         
         // Notification system
         notification: {
@@ -858,53 +882,85 @@ function serverDetails() {
 
         // Terminal functionality
         async createTerminalSession() {
+            if (this.terminalSession || this.wettyInstance) return;
+            
             this.terminalLoading = true;
             try {
-                const response = await fetch('{{ route("server-manager.terminal.create") }}', {
-                    method: 'POST',
-                    headers: window.getDefaultHeaders(),
-                    body: JSON.stringify({ server_id: {{ $server->id }} })
-                });
-                
-                const result = await response.json();
-                if (result.success) {
-                    this.terminalSession = result.session_id;
-                    this.terminalConnected = true;
-                    
-                    // Wait for DOM to update (x-show to take effect)
-                    await this.$nextTick();
-                    
-                    // Add a small delay to ensure the container is visible
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    
-                    // Initialize xterm.js
-                    await this.initializeTerminal();
-                    
-                    // Display initial prompt if provided
-                    if (result.initial_output && this.terminal) {
-                        this.terminal.write(result.initial_output);
-                    }
-                    
-                    // Wait a bit more before starting polling to let backend establish session
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    // Start output polling (less aggressive since we have interactive input now)
-                    this.startOutputPolling();
-                    
-                    // Use a non-blocking notification instead of alert
-                    this.showNotification('✅ Terminal session started!', 'success');
+                if (this.terminalMode === 'wetty') {
+                    await this.createWettySession();
                 } else {
-                    this.showNotification('❌ Failed to start terminal: ' + result.message, 'error');
+                    await this.createSimpleSession();
                 }
             } catch (error) {
                 this.showNotification('❌ Failed to start terminal: ' + error.message, 'error');
             }
             this.terminalLoading = false;
         },
+        
+        async createSimpleSession() {
+            const response = await fetch('{{ route("server-manager.terminal.create") }}', {
+                method: 'POST',
+                headers: window.getDefaultHeaders(),
+                body: JSON.stringify({ 
+                    server_id: {{ $server->id }},
+                    mode: 'simple'
+                })
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                this.terminalSession = result.session_id;
+                this.terminalConnected = true;
+                
+                // Wait for DOM to update
+                await this.$nextTick();
+                await new Promise(resolve => setTimeout(resolve, 100));
+                
+                await this.initializeTerminal();
+                
+                this.currentPrompt = `{{ $server->username ?? 'user' }}@{{ $server->name }}:~$ `;
+                this.commandHistory = `<div class="text-blue-400">Welcome to {{ $server->name }}</div><div class="text-gray-400 text-xs">Simple terminal mode - Type commands and press Enter</div>`;
+                
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                this.startOutputPolling();
+                
+                this.showNotification('✅ Simple terminal started!', 'success');
+            } else {
+                this.showNotification('❌ Failed to start terminal: ' + result.message, 'error');
+            }
+        },
+        
+        async createWettySession() {
+            const response = await fetch('{{ route("server-manager.terminal.create") }}', {
+                method: 'POST',
+                headers: window.getDefaultHeaders(),
+                body: JSON.stringify({ 
+                    server_id: {{ $server->id }},
+                    mode: 'wetty'
+                })
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                this.wettyInstance = result.instance_id;
+                this.wettyUrl = result.url;
+                this.wettyLoaded = false;
+                
+                this.showNotification('✅ Wetty terminal started!', 'success');
+            } else {
+                this.showNotification('❌ Failed to start wetty: ' + result.message, 'error');
+            }
+        },
 
         async closeTerminalSession() {
-            if (!this.terminalSession) return;
-            
+            if (this.wettyInstance) {
+                await this.closeWettySession();
+            } else if (this.terminalSession) {
+                await this.closeSimpleSession();
+            }
+        },
+        
+        async closeSimpleSession() {
             try {
                 await fetch('{{ route("server-manager.terminal.close") }}', {
                     method: 'POST',
@@ -920,7 +976,31 @@ function serverDetails() {
             this.destroyTerminal();
             this.terminalSession = null;
             this.terminalConnected = false;
-            this.pollAttempts = 0; // Reset poll attempts
+            this.pollAttempts = 0;
+        },
+        
+        async closeWettySession() {
+            try {
+                const response = await fetch('/server-manager/terminal/wetty/stop', {
+                    method: 'POST',
+                    headers: window.getDefaultHeaders(),
+                    body: JSON.stringify({ instance_id: this.wettyInstance })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    this.showNotification('✅ Wetty terminal stopped', 'success');
+                } else {
+                    this.showNotification('⚠️ ' + result.message, 'error');
+                }
+            } catch (error) {
+                console.error('Error stopping wetty:', error);
+            }
+            
+            // Clean up
+            this.wettyInstance = null;
+            this.wettyUrl = '';
+            this.wettyLoaded = false;
         },
 
         async executeCommand() {
@@ -1115,6 +1195,86 @@ function serverDetails() {
 
         hideNotification() {
             this.notification.show = false;
+        },
+
+        async executeSimpleCommand() {
+            if (!this.terminalSession || !this.currentCommand.trim()) return;
+            
+            const command = this.currentCommand.trim();
+            this.currentCommand = '';
+            
+            // Add command to history
+            this.commandHistory += `<div>${this.currentPrompt}${command}</div>`;
+            
+            try {
+                const response = await fetch('{{ route("server-manager.terminal.execute") }}', {
+                    method: 'POST',
+                    headers: window.getDefaultHeaders(),
+                    body: JSON.stringify({ 
+                        session_id: this.terminalSession,
+                        command: command
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    // Add output to history
+                    const output = result.output || '';
+                    this.commandHistory += `<div class="whitespace-pre-wrap">${this.escapeHtml(output)}</div>`;
+                } else {
+                    this.commandHistory += `<div class="text-red-400">Error: ${result.message || 'Command failed'}</div>`;
+                }
+            } catch (error) {
+                this.commandHistory += `<div class="text-red-400">Error: ${error.message}</div>`;
+            }
+            
+            // Scroll to bottom
+            this.$nextTick(() => {
+                const output = document.getElementById('command-output');
+                if (output) {
+                    output.scrollTop = output.scrollHeight;
+                }
+            });
+        },
+
+        async checkWettyStatus() {
+            try {
+                const response = await fetch('/server-manager/terminal/wetty/status', {
+                    method: 'GET',
+                    headers: window.getDefaultHeaders()
+                });
+                
+                const result = await response.json();
+                this.wettyStatus = result;
+                
+                if (result.installed) {
+                    this.showNotification(`✅ Wetty is installed (${result.version})`, 'success');
+                } else {
+                    this.showNotification(`❌ Wetty not installed. Run: ${result.install_command}`, 'error');
+                }
+            } catch (error) {
+                this.showNotification('❌ Failed to check wetty status: ' + error.message, 'error');
+            }
+        },
+
+        clearTerminal() {
+            if (this.terminalSession && !this.wettyInstance) {
+                this.commandHistory = '';
+                if (this.terminal) {
+                    this.terminal.clear();
+                }
+            }
+        },
+
+        switchToFullTerminal() {
+            // This function is now deprecated - wetty mode is selected before starting
+            this.showNotification('Please stop current terminal and restart with "Full (Wetty)" mode selected.', 'info');
+        },
+
+        escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         },
 
         init() {

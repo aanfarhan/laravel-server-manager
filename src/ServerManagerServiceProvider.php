@@ -7,6 +7,7 @@ use ServerManager\LaravelServerManager\Services\SshService;
 use ServerManager\LaravelServerManager\Services\MonitoringService;
 use ServerManager\LaravelServerManager\Services\LogService;
 use ServerManager\LaravelServerManager\Services\TerminalService;
+use ServerManager\LaravelServerManager\Services\WettyService;
 
 class ServerManagerServiceProvider extends ServiceProvider
 {
@@ -16,6 +17,7 @@ class ServerManagerServiceProvider extends ServiceProvider
         $this->app->singleton(MonitoringService::class);
         $this->app->singleton(LogService::class);
         $this->app->singleton(TerminalService::class);
+        $this->app->singleton(WettyService::class);
 
         $this->mergeConfigFrom(
             __DIR__ . '/../config/server-manager.php',

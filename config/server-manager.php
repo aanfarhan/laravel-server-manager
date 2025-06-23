@@ -31,6 +31,27 @@ return [
         'default_rows' => 24,
         'default_cols' => 80,
         'polling_interval' => 500, // milliseconds
+        'default_mode' => 'simple', // simple or wetty
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Wetty Terminal Settings
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for wetty-based full terminal instances
+    |
+    */
+    'wetty' => [
+        'path' => 'wetty', // wetty executable path
+        'base_port' => 3000, // starting port for wetty instances
+        'max_instances' => 10, // maximum concurrent wetty instances
+        'instance_timeout' => 7200, // 2 hours in seconds
+        'auto_cleanup' => true, // automatically cleanup dead instances
+        'host' => '127.0.0.1', // bind to localhost only for security
+        'ssl' => false, // enable SSL (requires SSL certificates)
+        'ssl_cert' => null, // path to SSL certificate
+        'ssl_key' => null, // path to SSL private key
     ],
 
     /*

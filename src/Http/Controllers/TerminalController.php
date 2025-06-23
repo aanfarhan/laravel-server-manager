@@ -5,15 +5,18 @@ namespace ServerManager\LaravelServerManager\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use ServerManager\LaravelServerManager\Services\TerminalService;
+use ServerManager\LaravelServerManager\Services\WettyService;
 use ServerManager\LaravelServerManager\Models\Server;
 
 class TerminalController extends Controller
 {
     protected TerminalService $terminalService;
+    protected WettyService $wettyService;
 
-    public function __construct(TerminalService $terminalService)
+    public function __construct(TerminalService $terminalService, WettyService $wettyService)
     {
         $this->terminalService = $terminalService;
+        $this->wettyService = $wettyService;
     }
 
     /**
@@ -22,18 +25,32 @@ class TerminalController extends Controller
     public function create(Request $request)
     {
         $request->validate([
-            'server_id' => 'required|exists:servers,id'
+            'server_id' => 'required|exists:servers,id',
+            'mode' => 'sometimes|in:simple,wetty'
         ]);
 
         try {
             $server = Server::findOrFail($request->server_id);
-            $result = $this->terminalService->createSession($server);
-
-            if ($result['success']) {
-                // Store session ID in user session for cleanup
-                $sessions = session('terminal_sessions', []);
-                $sessions[] = $result['session_id'];
-                session(['terminal_sessions' => $sessions]);
+            $mode = $request->input('mode', 'simple');
+            
+            if ($mode === 'wetty') {
+                $result = $this->wettyService->startInstance($server);
+                
+                if ($result['success']) {
+                    // Store instance ID in user session for cleanup
+                    $instances = session('wetty_instances', []);
+                    $instances[] = $result['instance_id'];
+                    session(['wetty_instances' => $instances]);
+                }
+            } else {
+                $result = $this->terminalService->createSession($server);
+                
+                if ($result['success']) {
+                    // Store session ID in user session for cleanup
+                    $sessions = session('terminal_sessions', []);
+                    $sessions[] = $result['session_id'];
+                    session(['terminal_sessions' => $sessions]);
+                }
             }
 
             return response()->json($result);
@@ -289,6 +306,144 @@ class TerminalController extends Controller
                 'success' => false,
                 'message' => 'Bulk operation failed: ' . $e->getMessage(),
                 'results' => $results
+            ], 500);
+        }
+    }
+
+    /**
+     * Start wetty instance
+     */
+    public function startWetty(Request $request)
+    {
+        $request->validate([
+            'server_id' => 'required|exists:servers,id'
+        ]);
+
+        try {
+            $server = Server::findOrFail($request->server_id);
+            $result = $this->wettyService->startInstance($server);
+
+            if ($result['success']) {
+                // Store instance ID in user session for cleanup
+                $instances = session('wetty_instances', []);
+                $instances[] = $result['instance_id'];
+                session(['wetty_instances' => $instances]);
+            }
+
+            return response()->json($result);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to start wetty instance: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Stop wetty instance
+     */
+    public function stopWetty(Request $request)
+    {
+        $request->validate([
+            'instance_id' => 'required|string'
+        ]);
+
+        try {
+            $result = $this->wettyService->stopInstance($request->instance_id);
+
+            if ($result['success']) {
+                // Remove from user session
+                $instances = session('wetty_instances', []);
+                $instances = array_filter($instances, function($id) use ($request) {
+                    return $id !== $request->instance_id;
+                });
+                session(['wetty_instances' => array_values($instances)]);
+            }
+
+            return response()->json($result);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to stop wetty instance: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get wetty instance info
+     */
+    public function wettyInfo(Request $request)
+    {
+        $request->validate([
+            'instance_id' => 'required|string'
+        ]);
+
+        try {
+            $result = $this->wettyService->getInstance($request->instance_id);
+            return response()->json($result);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get wetty instance info: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * List active wetty instances
+     */
+    public function wettyInstances()
+    {
+        try {
+            $result = $this->wettyService->getActiveInstances();
+            return response()->json($result);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to list wetty instances: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Cleanup dead wetty instances
+     */
+    public function wettyCleanup()
+    {
+        try {
+            $cleanedCount = $this->wettyService->cleanupInstances();
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Cleaned up {$cleanedCount} dead instances",
+                'cleaned_count' => $cleanedCount
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to cleanup wetty instances: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get wetty installation status
+     */
+    public function wettyStatus()
+    {
+        try {
+            $result = $this->wettyService->getWettyStatus();
+            return response()->json($result);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to check wetty status: ' . $e->getMessage()
             ], 500);
         }
     }

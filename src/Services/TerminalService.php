@@ -118,6 +118,16 @@ class TerminalService
             // Execute command directly (stateless approach)
             $result = $this->sshService->execute($command);
             $output = $result['output'];
+            
+            // Update current directory if it's a cd command
+            if (strpos($command, 'cd ') === 0) {
+                $newPath = $this->getUpdatedPath($session['current_path'], $command);
+                $session['current_path'] = $newPath;
+                $session['prompt'] = $this->buildPrompt($session, $newPath);
+                
+                // For cd commands, append the new prompt to show directory change
+                $output .= "\n" . $session['prompt'];
+            }
 
             Log::debug("Command executed in terminal", [
                 'session_id' => $sessionId,

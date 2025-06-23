@@ -36,6 +36,14 @@ Route::prefix('server-manager')->name('server-manager.')->middleware('web')->gro
     Route::post('/terminal/cleanup', [TerminalController::class, 'cleanup'])->name('terminal.cleanup');
     Route::post('/terminal/bulk', [TerminalController::class, 'bulk'])->name('terminal.bulk');
     
+    // Wetty Terminal Routes
+    Route::post('/terminal/wetty/start', [TerminalController::class, 'startWetty'])->name('terminal.wetty.start');
+    Route::post('/terminal/wetty/stop', [TerminalController::class, 'stopWetty'])->name('terminal.wetty.stop');
+    Route::get('/terminal/wetty/info', [TerminalController::class, 'wettyInfo'])->name('terminal.wetty.info');
+    Route::get('/terminal/wetty/instances', [TerminalController::class, 'wettyInstances'])->name('terminal.wetty.instances');
+    Route::post('/terminal/wetty/cleanup', [TerminalController::class, 'wettyCleanup'])->name('terminal.wetty.cleanup');
+    Route::get('/terminal/wetty/status', [TerminalController::class, 'wettyStatus'])->name('terminal.wetty.status');
+    
     // Log Management Routes
     Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
     Route::get('/logs/files', [LogController::class, 'files'])->name('logs.files');
