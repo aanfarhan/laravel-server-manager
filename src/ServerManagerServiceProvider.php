@@ -37,6 +37,7 @@ class ServerManagerServiceProvider extends ServiceProvider
             __DIR__ . '/../resources/views' => resource_path('views/vendor/server-manager'),
         ], 'views');
 
+        // Load routes with web middleware for session and CSRF support
         $this->loadRoutesFrom(__DIR__ . '/../routes/web.php');
         $this->loadViewsFrom(__DIR__ . '/../resources/views', 'server-manager');
         $this->loadMigrationsFrom(__DIR__ . '/../database/migrations');

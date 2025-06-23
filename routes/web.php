@@ -5,7 +5,7 @@ use ServerManager\LaravelServerManager\Http\Controllers\ServerController;
 use ServerManager\LaravelServerManager\Http\Controllers\DeploymentController;
 use ServerManager\LaravelServerManager\Http\Controllers\LogController;
 
-Route::prefix('server-manager')->name('server-manager.')->group(function () {
+Route::prefix('server-manager')->name('server-manager.')->middleware('web')->group(function () {
     
     // Server Management Routes
     Route::get('/', [ServerController::class, 'index'])->name('index');
