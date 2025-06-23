@@ -209,21 +209,28 @@ class ServerController extends Controller
         }
     }
 
-    public function disconnect()
+    public function disconnect(Request $request)
     {
         try {
             $this->sshService->disconnect();
             
-            // Update server status if we have a connected server
-            $connectedServerId = session('connected_server_id');
-            if ($connectedServerId) {
-                $server = Server::find($connectedServerId);
+            // Determine which server to disconnect
+            $serverId = $request->input('server_id') ?: session('connected_server_id');
+            
+            if ($serverId) {
+                $server = Server::find($serverId);
                 if ($server) {
                     $server->updateConnectionStatus('disconnected');
                 }
+                
+                // Clear session if we're disconnecting the session server
+                if ($serverId == session('connected_server_id')) {
+                    session()->forget('connected_server_id');
+                }
+            } else {
+                // Fallback: clear session anyway
+                session()->forget('connected_server_id');
             }
-            
-            session()->forget('connected_server_id');
 
             return response()->json([
                 'success' => true,

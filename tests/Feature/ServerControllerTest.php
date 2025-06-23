@@ -1017,4 +1017,52 @@ class ServerControllerTest extends TestCase
             'message' => 'No server connected'
         ]);
     }
+
+    public function test_disconnect_with_specific_server_id()
+    {
+        // Create two connected servers
+        $server1 = Server::create([
+            'name' => 'Server 1',
+            'host' => 'server1.example.com',
+            'username' => 'user1',
+            'password' => 'pass1',
+            'status' => 'connected'
+        ]);
+
+        $server2 = Server::create([
+            'name' => 'Server 2',
+            'host' => 'server2.example.com',
+            'username' => 'user2',
+            'password' => 'pass2',
+            'status' => 'connected'
+        ]);
+
+        // Set session to server1
+        session(['connected_server_id' => $server1->id]);
+
+        // Mock SSH service disconnect
+        $this->mockSshService
+            ->shouldReceive('disconnect')
+            ->once();
+
+        // Disconnect server2 specifically (not the session server)
+        $response = $this->postJson(route('server-manager.servers.disconnect'), [
+            'server_id' => $server2->id
+        ]);
+
+        // Should return success
+        $response->assertStatus(200);
+        $response->assertJson(['success' => true]);
+
+        // Server2 should be marked as disconnected
+        $server2->refresh();
+        $this->assertEquals('disconnected', $server2->status);
+
+        // Server1 should still be connected (in database status)
+        $server1->refresh();
+        $this->assertEquals('connected', $server1->status);
+
+        // Session should still contain server1 (we disconnected server2, not session server)
+        $this->assertEquals($server1->id, session('connected_server_id'));
+    }
 }

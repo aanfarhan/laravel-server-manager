@@ -546,7 +546,10 @@ function serverDetails() {
                 
                 const response = await fetch('{{ route("server-manager.servers.disconnect") }}', {
                     method: 'POST',
-                    headers: window.getDefaultHeaders()
+                    headers: window.getDefaultHeaders(),
+                    body: JSON.stringify({
+                        server_id: {{ $server->id }}
+                    })
                 });
                 
                 const result = await response.json();
