@@ -4,7 +4,7 @@ The Laravel Server Manager provides multiple terminal interface options to suit 
 
 ## Current Implementation: Dual Terminal Mode
 
-The package now supports both **Simple** and **Full (Wetty)** terminal modes that can be selected before starting a session.
+The package now supports both **Simple** and **Full (WebSocket)** terminal modes that can be selected before starting a session.
 
 ### Simple Terminal Mode (Default)
 
@@ -27,102 +27,162 @@ The package now supports both **Simple** and **Full (Wetty)** terminal modes tha
 4. Press Enter to execute
 5. View output in the terminal window
 
-### Full Terminal Mode (Wetty Integration)
+### Full Terminal Mode (WebSocket Integration)
 
 **Best for**: Full terminal functionality with interactive programs
 
 #### Features:
-- ✅ Real-time terminal emulation via WebSockets
+- ✅ Real-time terminal emulation via WebSockets + xterm.js
 - ✅ Interactive programs (`top`, `htop`, `nano`, `vim`)
 - ✅ Full keyboard support (all special keys)
 - ✅ Copy/paste functionality
 - ✅ Terminal resizing
 - ✅ Multiple concurrent sessions
-- ✅ Complete PTY emulation
+- ✅ Complete PTY emulation with SSH2
+- ✅ JWT-based authentication
+- ✅ Automatic session management
 
 #### Prerequisites:
-Install wetty globally via npm:
+Install Node.js dependencies and start the WebSocket server:
 ```bash
-npm install -g wetty
+cd vendor/omniglies/laravel-server-manager/terminal-server
+npm install
 ```
 
 #### Usage:
-1. Select "Full (Wetty)" mode
-2. Click "Start Wetty Terminal"
-3. Use full terminal functionality in iframe
-4. Automatically manages wetty instances
+1. Start the WebSocket terminal server (see below)
+2. Select "Full (WebSocket)" mode in the UI
+3. Click "Start WebSocket Terminal"
+4. Use full terminal functionality via xterm.js
+5. Sessions are automatically authenticated and managed
 
-#### Automatic Instance Management:
-- Laravel automatically starts/stops wetty instances
-- Each server gets a unique port assignment
-- Instances are cleaned up when sessions end
-- Configurable limits and timeouts
+#### WebSocket Server Management:
+- Standalone Node.js server with WebSocket communication
+- JWT-based authentication for security
+- Automatic connection cleanup and session management
+- Configurable connection limits and timeouts
+- Production-ready with PM2 support
 
 ## Configuration
 
-### Wetty Configuration
+### WebSocket Terminal Configuration
 Update your `config/server-manager.php`:
 
 ```php
-'wetty' => [
-    'path' => 'wetty', // wetty executable path
-    'base_port' => 3000, // starting port for wetty instances
-    'max_instances' => 10, // maximum concurrent wetty instances
-    'instance_timeout' => 7200, // 2 hours in seconds
-    'auto_cleanup' => true, // automatically cleanup dead instances
-    'host' => '127.0.0.1', // bind to localhost only for security
-    'ssl' => false, // enable SSL (requires SSL certificates)
-    'ssl_cert' => null, // path to SSL certificate
-    'ssl_key' => null, // path to SSL private key
+'websocket' => [
+    'host' => env('WEBSOCKET_TERMINAL_HOST', 'localhost'),
+    'port' => env('WEBSOCKET_TERMINAL_PORT', 3001),
+    'ssl' => env('WEBSOCKET_TERMINAL_SSL', false),
+    'jwt_secret' => env('WEBSOCKET_TERMINAL_JWT_SECRET', env('APP_KEY')),
+    'token_ttl' => env('WEBSOCKET_TERMINAL_TOKEN_TTL', 3600), // 1 hour
+    'server_path' => env('WEBSOCKET_TERMINAL_SERVER_PATH', base_path('terminal-server/server.js')),
+    'auto_start' => env('WEBSOCKET_TERMINAL_AUTO_START', false),
+    'max_connections' => env('WEBSOCKET_TERMINAL_MAX_CONNECTIONS', 100),
+    'connection_timeout' => env('WEBSOCKET_TERMINAL_CONNECTION_TIMEOUT', 300000), // 5 minutes
 ],
+```
+
+### Environment Variables
+Add to your `.env` file:
+
+```env
+# WebSocket Terminal Server
+WEBSOCKET_TERMINAL_HOST=localhost
+WEBSOCKET_TERMINAL_PORT=3001
+WEBSOCKET_TERMINAL_SSL=false
+WEBSOCKET_TERMINAL_JWT_SECRET=your-jwt-secret-here
+WEBSOCKET_TERMINAL_TOKEN_TTL=3600
+WEBSOCKET_TERMINAL_MAX_CONNECTIONS=100
 ```
 
 ### Terminal Mode Selection
 Set default mode in config:
 ```php
 'terminal' => [
-    'default_mode' => 'simple', // 'simple' or 'wetty'
+    'default_mode' => 'simple', // 'simple' or 'websocket'
     // ... other terminal settings
 ],
 ```
 
 ## Installation & Setup
 
-### 1. Install Wetty (Required for Full Mode)
+### 1. Install WebSocket Terminal Server
 ```bash
-# Install wetty globally
-npm install -g wetty
+# Navigate to the terminal server directory
+cd vendor/omniglies/laravel-server-manager/terminal-server
 
-# Verify installation
-wetty --version
+# Install Node.js dependencies
+npm install
+
+# Copy environment configuration
+cp .env.example .env
 ```
 
-### 2. Check Installation Status
-Use the "Check Wetty Status" button in the UI to verify wetty is properly installed.
+### 2. Configure WebSocket Server
+Edit `terminal-server/.env`:
 
-### 3. Security Considerations
-- Wetty instances bind to `127.0.0.1` by default for security
+```env
+PORT=3001
+JWT_SECRET=your-jwt-secret-matching-laravel
+MAX_CONNECTIONS=100
+CONNECTION_TIMEOUT=300000
+```
+
+### 3. Start WebSocket Server
+
+#### Development
+```bash
+npm run dev
+```
+
+#### Production
+```bash
+# Direct start
+npm start
+
+# With PM2 (recommended)
+pm2 start server.js --name "terminal-server"
+pm2 startup
+pm2 save
+```
+
+#### Docker Deployment
+```bash
+# Build and run with Docker
+docker build -t laravel-terminal-server .
+docker run -d -p 3001:3001 --name terminal-server laravel-terminal-server
+```
+
+### 4. Verify Installation
+Use the "Check Server Status" button in the UI to verify the WebSocket server is running.
+
+### 5. Security Considerations
+- WebSocket server binds to localhost by default for security
+- JWT tokens are used for authentication between Laravel and WebSocket server
 - Configure SSL certificates for production use
-- Set appropriate instance limits and timeouts
-- Use firewall rules to restrict access
+- Set appropriate connection limits and timeouts
+- Use reverse proxy (nginx) for SSL termination
 
 ## API Endpoints
 
-### Wetty Management Routes
+### WebSocket Terminal Management Routes
 ```php
-POST /server-manager/terminal/create  // Create session (mode: simple|wetty)
-POST /server-manager/terminal/wetty/stop      // Stop wetty instance
-GET  /server-manager/terminal/wetty/status    // Check wetty installation
-GET  /server-manager/terminal/wetty/instances // List active instances
-POST /server-manager/terminal/wetty/cleanup   // Cleanup dead instances
+POST /server-manager/terminal/create                    // Create session (mode: simple|websocket)
+POST /server-manager/terminal/websocket/token           // Generate WebSocket authentication token
+POST /server-manager/terminal/websocket/revoke          // Revoke WebSocket token
+GET  /server-manager/terminal/websocket/status          // Check WebSocket server status
+GET  /server-manager/terminal/websocket/tokens          // List active tokens
+POST /server-manager/terminal/websocket/cleanup         // Cleanup expired tokens
+POST /server-manager/terminal/websocket/start-server    // Start WebSocket server
+POST /server-manager/terminal/websocket/stop-server     // Stop WebSocket server
 ```
 
 ## Choosing the Right Mode
 
-| Feature | Simple Mode | Wetty Mode |
-|---------|-------------|------------|
+| Feature | Simple Mode | WebSocket Mode |
+|---------|-------------|----------------|
 | Setup Complexity | ⭐ Easy | ⭐⭐ Medium |
-| Prerequisites | None | Node.js + wetty |
+| Prerequisites | None | Node.js + WebSocket server |
 | Interactive Programs | ❌ | ✅ |
 | Real-time Communication | ❌ | ✅ (WebSocket) |
 | Command Execution | ✅ | ✅ |
@@ -130,40 +190,70 @@ POST /server-manager/terminal/wetty/cleanup   // Cleanup dead instances
 | Keyboard Support | ⭐ Basic | ⭐⭐⭐ Complete |
 | Resource Usage | ⭐ Low | ⭐⭐ Medium |
 | Production Ready | ✅ | ✅ |
+| Authentication | Session-based | JWT + WebSocket |
+| Terminal Emulation | Basic | Full xterm.js |
 
 ## Troubleshooting
 
-### Wetty Not Starting
-1. Check if wetty is installed: `wetty --version`
-2. Verify port availability (default: 3000+)
-3. Check Laravel logs for error details
-4. Ensure proper permissions for wetty executable
+### WebSocket Server Not Starting
+1. Check if Node.js is installed: `node --version`
+2. Verify port availability: `lsof -i :3001`
+3. Check server logs: `npm start` or `pm2 logs terminal-server`
+4. Ensure proper permissions for server files
+
+### Authentication Issues
+1. Verify JWT secret matches between Laravel and WebSocket server
+2. Check token expiration settings
+3. Ensure proper CORS configuration if needed
+4. Verify WebSocket URL is accessible
 
 ### Connection Issues
 1. Verify server SSH credentials are correct
-2. Check firewall settings
+2. Check firewall settings for WebSocket port
 3. Ensure SSH key permissions are correct (600)
 4. Test SSH connection manually
+5. Check WebSocket server is running: `curl http://localhost:3001`
 
 ### Performance Issues
-1. Reduce `max_instances` in config
-2. Decrease `instance_timeout`
-3. Enable `auto_cleanup`
-4. Monitor system resources
+1. Reduce `max_connections` in WebSocket server config
+2. Decrease `connection_timeout`
+3. Enable `auto_cleanup` for tokens
+4. Monitor WebSocket server memory usage
+5. Use PM2 for production process management
 
-## Migration from Previous Versions
+### Browser Issues
+1. Check browser console for WebSocket errors
+2. Verify xterm.js loads correctly
+3. Test with different browsers
+4. Clear browser cache and cookies
 
-If upgrading from the previous WebSSH2 documentation:
+## Production Deployment
 
-1. **Wetty replaces WebSSH2** - More modern and actively maintained
-2. **Automatic management** - No manual Docker setup required
-3. **Integrated installation** - Uses npm instead of Docker
-4. **Better security** - Localhost binding by default
+### Recommended Setup
+1. **Process Manager**: Use PM2 for WebSocket server
+2. **Reverse Proxy**: Use Nginx for SSL termination
+3. **Monitoring**: Monitor WebSocket server health
+4. **Logging**: Centralized logging for debugging
+5. **Security**: Firewall rules and rate limiting
+
+### Nginx Configuration
+```nginx
+location /terminal-ws {
+    proxy_pass http://localhost:3001;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
 
 ## Recommendation
 
 - **Start with Simple Mode** - Works immediately for basic tasks
-- **Use Wetty Mode** - When you need interactive programs or full terminal features
-- **Proper Installation** - Follow wetty installation steps for production use
+- **Use WebSocket Mode** - When you need interactive programs or full terminal features
+- **Production Setup** - Follow WebSocket server installation and PM2 setup for production
 
-The current implementation provides **immediate functionality** with Simple mode while offering **complete terminal capabilities** through integrated Wetty management.
+The current implementation provides **immediate functionality** with Simple mode while offering **complete terminal capabilities** through modern WebSocket + xterm.js technology.

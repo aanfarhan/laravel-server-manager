@@ -5,6 +5,7 @@ A comprehensive Laravel package for server management with SSH connectivity, git
 ## Features
 
 - **SSH Connection Management**: Connect to remote servers using password or private key authentication
+- **Terminal Access**: Dual-mode terminal support (Simple + WebSocket with xterm.js)
 - **Git Deployment**: Deploy applications from git repositories with customizable build scripts
 - **Server Monitoring**: Real-time monitoring of CPU, memory, disk usage, processes, and services
 - **Log Management**: View, search, download, and manage server log files
@@ -37,22 +38,79 @@ php artisan migrate
 php artisan vendor:publish --tag=views --provider="ServerManager\LaravelServerManager\ServerManagerServiceProvider"
 ```
 
+5. For full terminal functionality, install Node.js dependencies and start the WebSocket server:
+
+```bash
+cd vendor/omniglies/laravel-server-manager/terminal-server
+npm install
+```
+
 ## Configuration
 
 The package publishes a configuration file to `config/server-manager.php`. You can customize:
 
 - SSH connection settings
+- Terminal configurations (Simple and WebSocket modes)
+- WebSocket server settings and authentication
 - Deployment configurations
 - Monitoring thresholds
 - Log management settings
 - Security restrictions
 - UI preferences
 
+### WebSocket Terminal Configuration
+
+Add these environment variables to your `.env` file:
+
+```env
+# WebSocket Terminal Server
+WEBSOCKET_TERMINAL_HOST=localhost
+WEBSOCKET_TERMINAL_PORT=3001
+WEBSOCKET_TERMINAL_SSL=false
+WEBSOCKET_TERMINAL_JWT_SECRET=your-jwt-secret-here
+WEBSOCKET_TERMINAL_TOKEN_TTL=3600
+WEBSOCKET_TERMINAL_MAX_CONNECTIONS=100
+```
+
 ## Usage
 
 ### Web Interface
 
 Visit `/server-manager` in your Laravel application to access the web interface.
+
+### Terminal Access
+
+The package provides two terminal modes:
+
+#### Simple Terminal Mode (Default)
+- Works immediately, no additional setup required
+- Execute commands independently
+- View command output in real-time
+- Perfect for basic server administration
+
+#### WebSocket Terminal Mode (Full Terminal)
+Provides complete terminal functionality with interactive programs.
+
+**Start the WebSocket server:**
+
+```bash
+# Development
+cd vendor/omniglies/laravel-server-manager/terminal-server
+npm run dev
+
+# Production
+npm start
+
+# Or with PM2
+pm2 start server.js --name "terminal-server"
+```
+
+**Features:**
+- Real-time terminal emulation via xterm.js
+- Interactive programs (nano, vim, top, htop)
+- Full keyboard support and terminal resizing
+- Copy/paste functionality
+- WebSocket-based communication
 
 ### SSH Connection
 
@@ -134,6 +192,16 @@ The package provides several API endpoints:
 - `POST /server-manager/deployments/rollback` - Rollback deployment
 - `GET /server-manager/deployments/status` - Get deployment status
 
+### Terminal Management
+- `POST /server-manager/terminal/create` - Create terminal session (Simple or WebSocket mode)
+- `POST /server-manager/terminal/execute` - Execute command in Simple mode
+- `POST /server-manager/terminal/close` - Close terminal session
+- `POST /server-manager/terminal/websocket/token` - Generate WebSocket authentication token
+- `POST /server-manager/terminal/websocket/revoke` - Revoke WebSocket token
+- `GET /server-manager/terminal/websocket/status` - Check WebSocket server status
+- `POST /server-manager/terminal/websocket/start-server` - Start WebSocket server
+- `POST /server-manager/terminal/websocket/stop-server` - Stop WebSocket server
+
 ### Log Management
 - `GET /server-manager/logs/files` - List log files
 - `GET /server-manager/logs/read` - Read log file
@@ -164,6 +232,14 @@ Make sure to:
 - PHP 8.2+
 - Laravel 10.0+, 11.0+, or 12.0+
 - phpseclib/phpseclib ^3.0
+- firebase/php-jwt ^6.0
+- Node.js 18+ (for WebSocket terminal server)
+
+### Node.js Dependencies (for WebSocket Terminal)
+- ws ^8.14.2
+- ssh2 ^1.15.0
+- jsonwebtoken ^9.0.2
+- dotenv ^16.3.1
 
 ## Contributing
 

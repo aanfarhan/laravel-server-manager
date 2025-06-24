@@ -448,29 +448,46 @@
                         Terminal Session
                     </h3>
                     <div class="flex space-x-2">
+                        <!-- Terminal Mode Selector -->
+                        <div class="flex items-center space-x-2 mr-4">
+                            <span class="text-sm text-gray-600 dark:text-gray-400">Mode:</span>
+                            <select x-model="terminalMode" 
+                                    :disabled="terminalLoading || terminalSession || websocketSession"
+                                    class="text-sm border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                                <option value="simple">Simple</option>
+                                <option value="websocket">Full (WebSocket)</option>
+                            </select>
+                        </div>
+                        
                         <button @click="createTerminalSession()" 
-                                :disabled="terminalLoading || terminalSession"
+                                :disabled="terminalLoading || terminalSession || websocketSession"
                                 class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50">
                             <i class="fas fa-play mr-1"></i>
-                            Start Terminal
+                            <span x-text="terminalMode === 'websocket' ? 'Start WebSocket Terminal' : 'Start Simple Terminal'"></span>
                         </button>
                         <button @click="closeTerminalSession()" 
-                                x-show="terminalSession"
+                                x-show="terminalSession || websocketSession"
                                 class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
                             <i class="fas fa-stop mr-1"></i>
-                            Close Terminal
+                            <span x-text="websocketSession ? 'Close WebSocket Terminal' : 'Close Terminal'"></span>
                         </button>
                         <button @click="clearTerminal()" 
-                                x-show="terminalSession"
+                                x-show="terminalSession || websocketSession"
                                 class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">
                             <i class="fas fa-eraser mr-1"></i>
                             Clear
+                        </button>
+                        <button @click="checkWebSocketStatus()" 
+                                x-show="terminalMode === 'websocket'"
+                                class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">
+                            <i class="fas fa-info-circle mr-1"></i>
+                            Check Server Status
                         </button>
                     </div>
                 </div>
 
                 <!-- Terminal Container -->
-                <div x-show="terminalSession" class="space-y-4">
+                <div x-show="terminalSession || websocketSession" class="space-y-4">
                     <div class="bg-black rounded-lg border border-gray-300 dark:border-gray-600">
                         <!-- Terminal Header -->
                         <div class="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-t-lg border-b border-gray-300 dark:border-gray-600">
@@ -478,31 +495,34 @@
                                 <div class="w-3 h-3 bg-red-500 rounded-full"></div>
                                 <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
                                 <div class="w-3 h-3 bg-green-500 rounded-full"></div>
-                                <span class="ml-4 text-sm text-gray-600 dark:text-gray-400 font-mono" x-text="'{{ $server->name }} - Terminal'"></span>
+                                <span class="ml-4 text-sm text-gray-600 dark:text-gray-400 font-mono" 
+                                      x-text="websocketSession ? '{{ $server->name }} - WebSocket Terminal' : '{{ $server->name }} - Simple Terminal'"></span>
                             </div>
                             <div class="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-                                <span x-show="terminalConnected" class="flex items-center">
+                                <span x-show="terminalConnected || websocketConnected" class="flex items-center">
                                     <i class="fas fa-circle text-green-500 mr-1"></i>
-                                    Connected
+                                    <span x-text="websocketSession ? 'WebSocket Connected' : 'Connected'"></span>
                                 </span>
-                                <span x-show="!terminalConnected" class="flex items-center">
+                                <span x-show="!terminalConnected && !websocketConnected" class="flex items-center">
                                     <i class="fas fa-circle text-red-500 mr-1"></i>
                                     Disconnected
                                 </span>
                             </div>
                         </div>
                         
-                        <!-- Option 1: Full Web Terminal (iframe-based) -->
-                        <div x-show="useFullTerminal" class="h-96">
-                            <iframe 
-                                :src="fullTerminalUrl" 
-                                class="w-full h-full border-0 bg-black"
-                                style="background: #000;">
-                            </iframe>
+                        <!-- WebSocket Terminal (xterm.js) -->
+                        <div x-show="websocketSession" class="h-96 relative">
+                            <div id="websocket-terminal-container" class="w-full h-full"></div>
+                            <div x-show="!websocketConnected" class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75">
+                                <div class="text-white text-center">
+                                    <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                                    <p>Connecting to WebSocket Terminal...</p>
+                                </div>
+                            </div>
                         </div>
                         
-                        <!-- Option 2: Simple Command Interface -->
-                        <div x-show="!useFullTerminal" class="p-4">
+                        <!-- Simple Command Interface -->
+                        <div x-show="terminalSession && !websocketSession" class="p-4">
                             <div class="bg-black text-green-400 font-mono text-sm p-4 rounded h-80 overflow-y-auto" 
                                  id="command-output">
                                 <div x-html="commandHistory"></div>
@@ -521,17 +541,13 @@
                                     <i class="fas fa-info-circle mr-1"></i>
                                     Simple terminal mode - each command executes independently
                                 </span>
-                                <button @click="switchToFullTerminal()" 
-                                        class="ml-4 text-blue-500 hover:text-blue-700 underline">
-                                    Switch to Full Terminal
-                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Terminal Status/Help -->
-                <div x-show="!terminalSession" class="text-center py-8">
+                <div x-show="!terminalSession && !websocketSession" class="text-center py-8">
                     <div class="mx-auto w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
                         <i class="fas fa-terminal text-3xl text-gray-400"></i>
                     </div>
@@ -584,10 +600,12 @@ function serverDetails() {
         
         // Terminal modes
         terminalMode: 'simple',
-        wettyInstance: null,
-        wettyUrl: '',
-        wettyLoaded: false,
-        wettyStatus: null,
+        websocketSession: null,
+        websocketUrl: '',
+        websocketToken: '',
+        websocketConnected: false,
+        websocketStatus: null,
+        websocketTerminal: null,
         commandHistory: '',
         currentCommand: '',
         currentPrompt: 'user@server:~$ ',
@@ -882,12 +900,12 @@ function serverDetails() {
 
         // Terminal functionality
         async createTerminalSession() {
-            if (this.terminalSession || this.wettyInstance) return;
+            if (this.terminalSession || this.websocketSession) return;
             
             this.terminalLoading = true;
             try {
-                if (this.terminalMode === 'wetty') {
-                    await this.createWettySession();
+                if (this.terminalMode === 'websocket') {
+                    await this.createWebSocketSession();
                 } else {
                     await this.createSimpleSession();
                 }
@@ -930,31 +948,38 @@ function serverDetails() {
             }
         },
         
-        async createWettySession() {
-            const response = await fetch('{{ route("server-manager.terminal.create") }}', {
+        async createWebSocketSession() {
+            // Generate WebSocket token
+            const response = await fetch('/server-manager/terminal/websocket/token', {
                 method: 'POST',
                 headers: window.getDefaultHeaders(),
                 body: JSON.stringify({ 
-                    server_id: {{ $server->id }},
-                    mode: 'wetty'
+                    server_id: {{ $server->id }}
                 })
             });
             
             const result = await response.json();
-            if (result.success) {
-                this.wettyInstance = result.instance_id;
-                this.wettyUrl = result.url;
-                this.wettyLoaded = false;
-                
-                this.showNotification('✅ Wetty terminal started!', 'success');
-            } else {
-                this.showNotification('❌ Failed to start wetty: ' + result.message, 'error');
+            if (!result.success) {
+                this.showNotification('❌ Failed to generate token: ' + result.message, 'error');
+                return;
             }
+            
+            this.websocketToken = result.token;
+            this.websocketUrl = result.websocket_url;
+            this.websocketSession = result.token_id;
+            
+            // Wait for DOM to update
+            await this.$nextTick();
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            await this.initializeWebSocketTerminal();
+            
+            this.showNotification('✅ WebSocket terminal starting...', 'info');
         },
 
         async closeTerminalSession() {
-            if (this.wettyInstance) {
-                await this.closeWettySession();
+            if (this.websocketSession) {
+                await this.closeWebSocketSession();
             } else if (this.terminalSession) {
                 await this.closeSimpleSession();
             }
@@ -979,28 +1004,40 @@ function serverDetails() {
             this.pollAttempts = 0;
         },
         
-        async closeWettySession() {
+        async closeWebSocketSession() {
             try {
-                const response = await fetch('/server-manager/terminal/wetty/stop', {
-                    method: 'POST',
-                    headers: window.getDefaultHeaders(),
-                    body: JSON.stringify({ instance_id: this.wettyInstance })
-                });
-                
-                const result = await response.json();
-                if (result.success) {
-                    this.showNotification('✅ Wetty terminal stopped', 'success');
-                } else {
-                    this.showNotification('⚠️ ' + result.message, 'error');
+                // Close WebSocket connection
+                if (this.websocket) {
+                    this.websocket.close();
+                    this.websocket = null;
                 }
+                
+                // Dispose of xterm.js terminal
+                if (this.websocketTerminal) {
+                    this.websocketTerminal.dispose();
+                    this.websocketTerminal = null;
+                }
+                
+                // Revoke token
+                if (this.websocketSession) {
+                    await fetch('/server-manager/terminal/websocket/revoke', {
+                        method: 'POST',
+                        headers: window.getDefaultHeaders(),
+                        body: JSON.stringify({ token_id: this.websocketSession })
+                    });
+                }
+                
+                this.showNotification('✅ WebSocket terminal closed', 'success');
             } catch (error) {
-                console.error('Error stopping wetty:', error);
+                console.error('Error closing WebSocket terminal:', error);
             }
             
             // Clean up
-            this.wettyInstance = null;
-            this.wettyUrl = '';
-            this.wettyLoaded = false;
+            this.websocketSession = null;
+            this.websocketUrl = '';
+            this.websocketToken = '';
+            this.websocketConnected = false;
+            this.websocket = null;
         },
 
         async executeCommand() {
@@ -1237,38 +1274,193 @@ function serverDetails() {
             });
         },
 
-        async checkWettyStatus() {
+        async initializeWebSocketTerminal() {
+            return new Promise((resolve, reject) => {
+                // Load xterm.js if not already loaded
+                if (typeof Terminal === 'undefined') {
+                    const script = document.createElement('script');
+                    script.src = 'https://unpkg.com/xterm@5.3.0/lib/xterm.js';
+                    script.onload = () => {
+                        const css = document.createElement('link');
+                        css.rel = 'stylesheet';
+                        css.href = 'https://unpkg.com/xterm@5.3.0/css/xterm.css';
+                        document.head.appendChild(css);
+                        
+                        this.createWebSocketTerminalInstance();
+                        resolve();
+                    };
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                } else {
+                    this.createWebSocketTerminalInstance();
+                    resolve();
+                }
+            });
+        },
+
+        createWebSocketTerminalInstance() {
+            const container = document.getElementById('websocket-terminal-container');
+            if (!container) {
+                console.error('WebSocket terminal container not found');
+                return;
+            }
+            
+            // Clear container
+            container.innerHTML = '';
+            
+            // Create terminal
+            this.websocketTerminal = new Terminal({
+                cursorBlink: true,
+                fontSize: 14,
+                fontFamily: 'Consolas, Monaco, "Lucida Console", monospace',
+                theme: {
+                    background: '#000000',
+                    foreground: '#ffffff',
+                    cursor: '#ffffff',
+                    selection: '#ffffff'
+                },
+                rows: 24,
+                cols: 80
+            });
+            
+            // Mount terminal
+            this.websocketTerminal.open(container);
+            
+            // Connect to WebSocket server
+            this.connectWebSocket();
+        },
+
+        connectWebSocket() {
+            const wsUrl = `${this.websocketUrl}?token=${encodeURIComponent(this.websocketToken)}`;
+            this.websocket = new WebSocket(wsUrl);
+            
+            this.websocket.onopen = () => {
+                console.log('WebSocket connected');
+                
+                // Send authentication
+                this.websocket.send(JSON.stringify({
+                    type: 'auth',
+                    token: this.websocketToken
+                }));
+            };
+            
+            this.websocket.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                
+                switch (message.type) {
+                    case 'connected':
+                        console.log('WebSocket server connected:', message.message);
+                        break;
+                        
+                    case 'auth_success':
+                        console.log('WebSocket authenticated');
+                        // Now connect to SSH
+                        this.websocket.send(JSON.stringify({
+                            type: 'connect',
+                            rows: this.websocketTerminal.rows,
+                            cols: this.websocketTerminal.cols
+                        }));
+                        break;
+                        
+                    case 'ready':
+                        console.log('SSH connection ready');
+                        this.websocketConnected = true;
+                        this.showNotification('✅ WebSocket terminal connected!', 'success');
+                        break;
+                        
+                    case 'data':
+                        if (this.websocketTerminal) {
+                            this.websocketTerminal.write(message.data);
+                        }
+                        break;
+                        
+                    case 'error':
+                        console.error('WebSocket error:', message.message);
+                        this.showNotification('❌ WebSocket error: ' + message.message, 'error');
+                        break;
+                        
+                    case 'disconnected':
+                        console.log('SSH session ended');
+                        this.websocketConnected = false;
+                        this.showNotification('⚠️ SSH session ended', 'info');
+                        break;
+                        
+                    case 'pong':
+                        // Keep-alive response
+                        break;
+                }
+            };
+            
+            this.websocket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                this.showNotification('❌ WebSocket connection error', 'error');
+            };
+            
+            this.websocket.onclose = (event) => {
+                console.log('WebSocket closed:', event.code, event.reason);
+                this.websocketConnected = false;
+                
+                if (event.code !== 1000) { // Not a normal closure
+                    this.showNotification('❌ WebSocket connection lost', 'error');
+                }
+            };
+            
+            // Handle terminal input
+            this.websocketTerminal.onData((data) => {
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    this.websocket.send(JSON.stringify({
+                        type: 'input',
+                        data: data
+                    }));
+                }
+            });
+            
+            // Handle terminal resize
+            this.websocketTerminal.onResize(({rows, cols}) => {
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    this.websocket.send(JSON.stringify({
+                        type: 'resize',
+                        rows: rows,
+                        cols: cols
+                    }));
+                }
+            });
+            
+            // Send periodic ping to keep connection alive
+            this.pingInterval = setInterval(() => {
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    this.websocket.send(JSON.stringify({ type: 'ping' }));
+                }
+            }, 30000); // Ping every 30 seconds
+        },
+
+        async checkWebSocketStatus() {
             try {
-                const response = await fetch('/server-manager/terminal/wetty/status', {
+                const response = await fetch('/server-manager/terminal/websocket/status', {
                     method: 'GET',
                     headers: window.getDefaultHeaders()
                 });
                 
                 const result = await response.json();
-                this.wettyStatus = result;
+                this.websocketStatus = result;
                 
-                if (result.installed) {
-                    this.showNotification(`✅ Wetty is installed (${result.version})`, 'success');
+                if (result.status === 'running') {
+                    this.showNotification(`✅ WebSocket server is running on ${result.websocket_url}`, 'success');
                 } else {
-                    this.showNotification(`❌ Wetty not installed. Run: ${result.install_command}`, 'error');
+                    this.showNotification(`❌ WebSocket server is not running: ${result.message}`, 'error');
                 }
             } catch (error) {
-                this.showNotification('❌ Failed to check wetty status: ' + error.message, 'error');
+                this.showNotification('❌ Failed to check WebSocket status: ' + error.message, 'error');
             }
         },
 
         clearTerminal() {
-            if (this.terminalSession && !this.wettyInstance) {
+            if (this.websocketTerminal) {
+                this.websocketTerminal.clear();
+            } else if (this.terminalSession && this.terminal) {
+                this.terminal.clear();
                 this.commandHistory = '';
-                if (this.terminal) {
-                    this.terminal.clear();
-                }
             }
-        },
-
-        switchToFullTerminal() {
-            // This function is now deprecated - wetty mode is selected before starting
-            this.showNotification('Please stop current terminal and restart with "Full (Wetty)" mode selected.', 'info');
         },
 
         escapeHtml(text) {

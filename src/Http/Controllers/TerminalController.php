@@ -5,18 +5,18 @@ namespace ServerManager\LaravelServerManager\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use ServerManager\LaravelServerManager\Services\TerminalService;
-use ServerManager\LaravelServerManager\Services\WettyService;
+use ServerManager\LaravelServerManager\Services\WebSocketTerminalService;
 use ServerManager\LaravelServerManager\Models\Server;
 
 class TerminalController extends Controller
 {
     protected TerminalService $terminalService;
-    protected WettyService $wettyService;
+    protected WebSocketTerminalService $webSocketTerminalService;
 
-    public function __construct(TerminalService $terminalService, WettyService $wettyService)
+    public function __construct(TerminalService $terminalService, WebSocketTerminalService $webSocketTerminalService)
     {
         $this->terminalService = $terminalService;
-        $this->wettyService = $wettyService;
+        $this->webSocketTerminalService = $webSocketTerminalService;
     }
 
     /**
@@ -33,14 +33,14 @@ class TerminalController extends Controller
             $server = Server::findOrFail($request->server_id);
             $mode = $request->input('mode', 'simple');
             
-            if ($mode === 'wetty') {
-                $result = $this->wettyService->startInstance($server);
+            if ($mode === 'websocket') {
+                $result = $this->webSocketTerminalService->generateToken($server);
                 
                 if ($result['success']) {
-                    // Store instance ID in user session for cleanup
-                    $instances = session('wetty_instances', []);
-                    $instances[] = $result['instance_id'];
-                    session(['wetty_instances' => $instances]);
+                    // Store token ID in user session for cleanup
+                    $tokens = session('websocket_tokens', []);
+                    $tokens[] = $result['token_id'];
+                    session(['websocket_tokens' => $tokens]);
                 }
             } else {
                 $result = $this->terminalService->createSession($server);
@@ -311,9 +311,9 @@ class TerminalController extends Controller
     }
 
     /**
-     * Start wetty instance
+     * Generate WebSocket token
      */
-    public function startWetty(Request $request)
+    public function generateWebSocketToken(Request $request)
     {
         $request->validate([
             'server_id' => 'required|exists:servers,id'
@@ -321,13 +321,13 @@ class TerminalController extends Controller
 
         try {
             $server = Server::findOrFail($request->server_id);
-            $result = $this->wettyService->startInstance($server);
+            $result = $this->webSocketTerminalService->generateToken($server);
 
             if ($result['success']) {
-                // Store instance ID in user session for cleanup
-                $instances = session('wetty_instances', []);
-                $instances[] = $result['instance_id'];
-                session(['wetty_instances' => $instances]);
+                // Store token ID in user session for cleanup
+                $tokens = session('websocket_tokens', []);
+                $tokens[] = $result['token_id'];
+                session(['websocket_tokens' => $tokens]);
             }
 
             return response()->json($result);
@@ -335,30 +335,30 @@ class TerminalController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to start wetty instance: ' . $e->getMessage()
+                'message' => 'Failed to generate WebSocket token: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * Stop wetty instance
+     * Revoke WebSocket token
      */
-    public function stopWetty(Request $request)
+    public function revokeWebSocketToken(Request $request)
     {
         $request->validate([
-            'instance_id' => 'required|string'
+            'token_id' => 'required|string'
         ]);
 
         try {
-            $result = $this->wettyService->stopInstance($request->instance_id);
+            $result = $this->webSocketTerminalService->revokeToken($request->token_id);
 
             if ($result['success']) {
                 // Remove from user session
-                $instances = session('wetty_instances', []);
-                $instances = array_filter($instances, function($id) use ($request) {
-                    return $id !== $request->instance_id;
+                $tokens = session('websocket_tokens', []);
+                $tokens = array_filter($tokens, function($id) use ($request) {
+                    return $id !== $request->token_id;
                 });
-                session(['wetty_instances' => array_values($instances)]);
+                session(['websocket_tokens' => array_values($tokens)]);
             }
 
             return response()->json($result);
@@ -366,84 +366,97 @@ class TerminalController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to stop wetty instance: ' . $e->getMessage()
+                'message' => 'Failed to revoke WebSocket token: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * Get wetty instance info
+     * Get WebSocket server status
      */
-    public function wettyInfo(Request $request)
+    public function webSocketStatus()
     {
-        $request->validate([
-            'instance_id' => 'required|string'
-        ]);
-
         try {
-            $result = $this->wettyService->getInstance($request->instance_id);
+            $result = $this->webSocketTerminalService->getServerStatus();
             return response()->json($result);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to get wetty instance info: ' . $e->getMessage()
+                'message' => 'Failed to get WebSocket status: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * List active wetty instances
+     * List active WebSocket tokens
      */
-    public function wettyInstances()
+    public function listWebSocketTokens()
     {
         try {
-            $result = $this->wettyService->getActiveInstances();
+            $result = $this->webSocketTerminalService->getActiveTokens();
             return response()->json($result);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to list wetty instances: ' . $e->getMessage()
+                'message' => 'Failed to list WebSocket tokens: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * Cleanup dead wetty instances
+     * Cleanup expired WebSocket tokens
      */
-    public function wettyCleanup()
+    public function cleanupWebSocketTokens()
     {
         try {
-            $cleanedCount = $this->wettyService->cleanupInstances();
+            $cleanedCount = $this->webSocketTerminalService->cleanupExpiredTokens();
             
             return response()->json([
                 'success' => true,
-                'message' => "Cleaned up {$cleanedCount} dead instances",
+                'message' => "Cleaned up {$cleanedCount} expired tokens",
                 'cleaned_count' => $cleanedCount
             ]);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to cleanup wetty instances: ' . $e->getMessage()
+                'message' => 'Failed to cleanup WebSocket tokens: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * Get wetty installation status
+     * Start WebSocket server
      */
-    public function wettyStatus()
+    public function startWebSocketServer()
     {
         try {
-            $result = $this->wettyService->getWettyStatus();
+            $result = $this->webSocketTerminalService->startServer();
             return response()->json($result);
 
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to check wetty status: ' . $e->getMessage()
+                'message' => 'Failed to start WebSocket server: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Stop WebSocket server
+     */
+    public function stopWebSocketServer()
+    {
+        try {
+            $result = $this->webSocketTerminalService->stopServer();
+            return response()->json($result);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to stop WebSocket server: ' . $e->getMessage()
             ], 500);
         }
     }

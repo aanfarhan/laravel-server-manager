@@ -1,0 +1,695 @@
+<?php
+
+namespace ServerManager\LaravelServerManager\Tests\Unit;
+
+use ServerManager\LaravelServerManager\Tests\TestCase;
+use ServerManager\LaravelServerManager\Services\WebSocketTerminalService;
+use ServerManager\LaravelServerManager\Models\Server;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
+use Carbon\Carbon;
+use Mockery;
+
+class WebSocketTerminalServiceTest extends TestCase
+{
+    use RefreshDatabase;
+    
+    protected $webSocketTerminalService;
+    protected $testServer;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        
+        // Set test configuration - use a real Laravel app key format
+        Config::set('app.key', 'base64:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8='); // Valid 32-byte key
+        Config::set('server-manager.websocket.jwt_secret', 'test-secret-key-for-testing');
+        Config::set('server-manager.websocket.token_ttl', 3600);
+        Config::set('server-manager.websocket.host', 'localhost');
+        Config::set('server-manager.websocket.port', 3001);
+        Config::set('server-manager.websocket.ssl', false);
+        Config::set('app.url', 'http://localhost');
+        
+        $this->webSocketTerminalService = new WebSocketTerminalService();
+    }
+
+    protected function tearDown(): void
+    {
+        Mockery::close();
+        parent::tearDown();
+    }
+
+    public function test_service_constructor()
+    {
+        $this->assertInstanceOf(WebSocketTerminalService::class, $this->webSocketTerminalService);
+    }
+
+    public function test_generate_token_success()
+    {
+        // Create test server using proper Laravel encryption
+        $testServer = new Server([
+            'name' => 'Test Server',
+            'host' => 'test.example.com',
+            'port' => 22,
+            'username' => 'testuser'
+        ]);
+        
+        // Set password and save - this should trigger encryption via model mutator
+        $testServer->password = 'testpassword';
+        $testServer->save();
+        
+        // Verify password was encrypted
+        $this->assertNotEquals('testpassword', $testServer->getAttributes()['password']);
+        
+        // Verify password can be decrypted
+        $decrypted = decrypt($testServer->password);
+        $this->assertEquals('testpassword', $decrypted);
+        
+        Cache::shouldReceive('put')->once()->andReturn(true);
+        Log::shouldReceive('info')->once();
+
+        $result = $this->webSocketTerminalService->generateToken($testServer);
+
+        $this->assertTrue($result['success']);
+        $this->assertArrayHasKey('token', $result);
+        $this->assertArrayHasKey('token_id', $result);
+        $this->assertArrayHasKey('websocket_url', $result);
+        $this->assertArrayHasKey('expires_at', $result);
+        $this->assertEquals('Test Server', $result['server_name']);
+        $this->assertEquals('ws://localhost:3001', $result['websocket_url']);
+
+        // Verify token is valid JWT
+        $decoded = JWT::decode($result['token'], new Key('test-secret-key-for-testing', 'HS256'));
+        $this->assertEquals($testServer->id, $decoded->server_id);
+        $this->assertEquals('Test Server', $decoded->server_name);
+        $this->assertEquals('test.example.com', $decoded->host);
+        $this->assertEquals(22, $decoded->port);
+        $this->assertEquals('testuser', $decoded->username);
+        $this->assertEquals('testpassword', $decoded->password);
+        
+        // Verify token structure
+        $this->assertObjectHasProperty('iss', $decoded);
+        $this->assertObjectHasProperty('sub', $decoded);
+        $this->assertObjectHasProperty('iat', $decoded);
+        $this->assertObjectHasProperty('exp', $decoded);
+        $this->assertEquals('http://localhost', $decoded->iss);
+    }
+
+    public function test_generate_token_with_private_key()
+    {
+        // Create temporary private key file
+        $tempKeyPath = tempnam(sys_get_temp_dir(), 'test_key');
+        file_put_contents($tempKeyPath, 'test-private-key-content');
+        
+        $serverWithKey = Server::create([
+            'name' => 'Test Server with Key',
+            'host' => 'test.example.com',
+            'port' => 22,
+            'username' => 'testuser',
+            'private_key_path' => $tempKeyPath
+        ]);
+
+        Cache::shouldReceive('put')->once()->andReturn(true);
+        Log::shouldReceive('info')->once();
+
+        $result = $this->webSocketTerminalService->generateToken($serverWithKey);
+
+        $this->assertTrue($result['success']);
+        
+        // Verify token contains private key
+        $decoded = JWT::decode($result['token'], new Key('test-secret-key-for-testing', 'HS256'));
+        $this->assertEquals('test-private-key-content', $decoded->privateKey);
+        $this->assertObjectNotHasProperty('password', $decoded);
+        
+        // Clean up
+        unlink($tempKeyPath);
+    }
+
+    public function test_generate_token_no_auth_method()
+    {
+        $serverNoAuth = Server::create([
+            'name' => 'Test Server No Auth',
+            'host' => 'test.example.com',
+            'port' => 22,
+            'username' => 'testuser'
+        ]);
+
+        Log::shouldReceive('error')->once();
+
+        $result = $this->webSocketTerminalService->generateToken($serverNoAuth);
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('No authentication method', $result['message']);
+    }
+
+    public function test_validate_token_success()
+    {
+        // Generate a test token
+        $payload = [
+            'iss' => config('app.url'),
+            'sub' => 'test_token_id',
+            'iat' => time(),
+            'exp' => time() + 3600,
+            'server_id' => 1,
+            'server_name' => 'Test Server',
+            'host' => 'test.example.com',
+            'port' => 22,
+            'username' => 'testuser',
+            'password' => 'testpassword'
+        ];
+
+        $token = JWT::encode($payload, 'test-secret-key', 'HS256');
+
+        // Mock cache to have token info
+        Cache::shouldReceive('get')
+            ->with('ws_terminal_token_test_token_id')
+            ->andReturn([
+                'server_id' => 1,
+                'created_at' => now(),
+                'used' => false
+            ]);
+
+        Cache::shouldReceive('put')
+            ->once()
+            ->andReturn(true);
+
+        $result = $this->webSocketTerminalService->validateToken($token);
+
+        $this->assertTrue($result['success']);
+        $this->assertArrayHasKey('payload', $result);
+        $this->assertArrayHasKey('token_info', $result);
+        $this->assertEquals(1, $result['payload']['server_id']);
+    }
+
+    public function test_validate_token_invalid_token()
+    {
+        $result = $this->webSocketTerminalService->validateToken('invalid.jwt.token');
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('Invalid or expired token', $result['message']);
+    }
+
+    public function test_validate_token_not_found_in_cache()
+    {
+        $payload = [
+            'iss' => config('app.url'),
+            'sub' => 'test_token_id',
+            'iat' => time(),
+            'exp' => time() + 3600,
+            'server_id' => 1
+        ];
+
+        $token = JWT::encode($payload, 'test-secret-key', 'HS256');
+
+        // Mock cache to return null (token not found)
+        Cache::shouldReceive('get')
+            ->with('ws_terminal_token_test_token_id')
+            ->andReturn(null);
+            
+        Log::shouldReceive('warning')->once();
+
+        $result = $this->webSocketTerminalService->validateToken($token);
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('Token not found or expired', $result['message']);
+    }
+    
+    public function test_validate_token_expired_jwt()
+    {
+        $tokenId = uniqid('expired_', true);
+        $payload = [
+            'iss' => 'http://localhost',
+            'sub' => $tokenId,
+            'iat' => time() - 7200, // 2 hours ago
+            'exp' => time() - 3600, // 1 hour ago (expired)
+            'server_id' => $this->testServer->id
+        ];
+
+        $token = JWT::encode($payload, 'test-secret-key-for-testing', 'HS256');
+        
+        Log::shouldReceive('warning')->once();
+
+        $result = $this->webSocketTerminalService->validateToken($token);
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('Invalid or expired token', $result['message']);
+    }
+
+    public function test_revoke_token_success()
+    {
+        $tokenId = 'test_token_id';
+
+        Cache::shouldReceive('get')
+            ->with('ws_terminal_token_' . $tokenId)
+            ->andReturn([
+                'server_id' => $this->testServer->id,
+                'created_at' => now(),
+                'used' => false
+            ]);
+
+        Cache::shouldReceive('forget')
+            ->with('ws_terminal_token_' . $tokenId)
+            ->once()
+            ->andReturn(true);
+            
+        Log::shouldReceive('info')->once();
+
+        $result = $this->webSocketTerminalService->revokeToken($tokenId);
+
+        $this->assertTrue($result['success']);
+        $this->assertEquals('Token revoked successfully', $result['message']);
+    }
+
+    public function test_revoke_token_not_found()
+    {
+        $tokenId = 'nonexistent_token';
+
+        Cache::shouldReceive('get')
+            ->with('ws_terminal_token_' . $tokenId)
+            ->andReturn(null);
+
+        $result = $this->webSocketTerminalService->revokeToken($tokenId);
+
+        $this->assertTrue($result['success']);
+        $this->assertStringContainsString('already expired or not found', $result['message']);
+    }
+
+    public function test_get_active_tokens_empty()
+    {
+        // Mock Redis keys method for cache
+        $mockRedis = Mockery::mock();
+        $mockRedis->shouldReceive('keys')
+            ->with('ws_terminal_token_*')
+            ->andReturn([]);
+
+        Cache::shouldReceive('getRedis')
+            ->andReturn($mockRedis);
+
+        $result = $this->webSocketTerminalService->getActiveTokens();
+
+        $this->assertTrue($result['success']);
+        $this->assertEquals(0, $result['count']);
+        $this->assertIsArray($result['tokens']);
+        $this->assertEmpty($result['tokens']);
+    }
+    
+    public function test_get_active_tokens_with_data()
+    {
+        $now = now();
+        
+        // Mock Redis keys method for cache
+        $mockRedis = Mockery::mock();
+        $mockRedis->shouldReceive('keys')
+            ->with('ws_terminal_token_*')
+            ->andReturn([
+                'ws_terminal_token_token1',
+                'ws_terminal_token_token2'
+            ]);
+
+        Cache::shouldReceive('getRedis')
+            ->andReturn($mockRedis);
+            
+        // Mock cache get calls
+        Cache::shouldReceive('get')
+            ->with('ws_terminal_token_token1')
+            ->andReturn([
+                'server_id' => $this->testServer->id,
+                'created_at' => $now,
+                'used' => true,
+                'used_at' => $now->addMinutes(5)
+            ]);
+            
+        Cache::shouldReceive('get')
+            ->with('ws_terminal_token_token2')
+            ->andReturn([
+                'server_id' => $this->testServer->id,
+                'created_at' => $now->subMinutes(10),
+                'used' => false
+            ]);
+
+        $result = $this->webSocketTerminalService->getActiveTokens();
+
+        $this->assertTrue($result['success']);
+        $this->assertEquals(2, $result['count']);
+        $this->assertCount(2, $result['tokens']);
+        
+        // Check token structure
+        $token1 = $result['tokens'][0];
+        $this->assertEquals('token1', $token1['token_id']);
+        $this->assertEquals($this->testServer->id, $token1['server_id']);
+        $this->assertTrue($token1['used']);
+        $this->assertNotNull($token1['used_at']);
+        
+        $token2 = $result['tokens'][1];
+        $this->assertEquals('token2', $token2['token_id']);
+        $this->assertFalse($token2['used']);
+        $this->assertNull($token2['used_at']);
+    }
+    
+    public function test_get_active_tokens_error_handling()
+    {
+        // Mock Redis to throw exception
+        $mockRedis = Mockery::mock();
+        $mockRedis->shouldReceive('keys')
+            ->andThrow(new \Exception('Redis connection failed'));
+
+        Cache::shouldReceive('getRedis')
+            ->andReturn($mockRedis);
+            
+        Log::shouldReceive('error')->once();
+
+        $result = $this->webSocketTerminalService->getActiveTokens();
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('Failed to get active tokens', $result['message']);
+        $this->assertEmpty($result['tokens']);
+        $this->assertEquals(0, $result['count']);
+    }
+
+    public function test_cleanup_expired_tokens()
+    {
+        $oldTime = now()->subHours(3); // 3 hours ago, well past TTL
+        
+        // Mock Redis keys method
+        $mockRedis = Mockery::mock();
+        $mockRedis->shouldReceive('keys')
+            ->with('ws_terminal_token_*')
+            ->andReturn([
+                'ws_terminal_token_token1',
+                'ws_terminal_token_token2',
+                'ws_terminal_token_token3'
+            ]);
+
+        Cache::shouldReceive('getRedis')
+            ->andReturn($mockRedis);
+
+        // Mock cache get calls
+        Cache::shouldReceive('get')
+            ->with('ws_terminal_token_token1')
+            ->andReturn([
+                'created_at' => now()->subMinutes(30), // Recent token
+                'server_id' => $this->testServer->id
+            ]);
+
+        Cache::shouldReceive('get')
+            ->with('ws_terminal_token_token2')
+            ->andReturn(null); // Already expired token
+            
+        Cache::shouldReceive('get')
+            ->with('ws_terminal_token_token3')
+            ->andReturn([
+                'created_at' => $oldTime, // Old token to be cleaned
+                'server_id' => $this->testServer->id
+            ]);
+            
+        Cache::shouldReceive('forget')
+            ->with('ws_terminal_token_token3')
+            ->once();
+            
+        Log::shouldReceive('info')->once();
+
+        $cleanedCount = $this->webSocketTerminalService->cleanupExpiredTokens();
+
+        $this->assertEquals(2, $cleanedCount); // token2 (null) + token3 (old)
+    }
+    
+    public function test_cleanup_expired_tokens_error_handling()
+    {
+        $mockRedis = Mockery::mock();
+        $mockRedis->shouldReceive('keys')
+            ->andThrow(new \Exception('Redis error'));
+
+        Cache::shouldReceive('getRedis')
+            ->andReturn($mockRedis);
+            
+        Log::shouldReceive('error')->once();
+
+        $cleanedCount = $this->webSocketTerminalService->cleanupExpiredTokens();
+
+        $this->assertEquals(0, $cleanedCount);
+    }
+
+    public function test_get_server_status_running()
+    {
+        // Mock the getActiveTokens method result
+        $mockRedis = Mockery::mock();
+        $mockRedis->shouldReceive('keys')
+            ->with('ws_terminal_token_*')
+            ->andReturn(['ws_terminal_token_token1']);
+
+        Cache::shouldReceive('getRedis')
+            ->andReturn($mockRedis);
+
+        Cache::shouldReceive('get')
+            ->with('ws_terminal_token_token1')
+            ->andReturn(['server_id' => $this->testServer->id]);
+
+        // Create a partial mock to override fsockopen behavior
+        $service = Mockery::mock(WebSocketTerminalService::class)->makePartial();
+        $service->shouldReceive('getServerStatus')
+            ->andReturn([
+                'success' => true,
+                'status' => 'running',
+                'message' => 'WebSocket terminal server is running',
+                'websocket_url' => 'ws://localhost:3001',
+                'active_tokens' => 1,
+                'server_config' => [
+                    'host' => 'localhost',
+                    'port' => 3001,
+                    'token_ttl' => 3600
+                ]
+            ]);
+
+        $result = $service->getServerStatus();
+
+        $this->assertTrue($result['success']);
+        $this->assertEquals('running', $result['status']);
+        $this->assertStringContainsString('running', $result['message']);
+        $this->assertEquals('ws://localhost:3001', $result['websocket_url']);
+        $this->assertEquals(1, $result['active_tokens']);
+        $this->assertArrayHasKey('server_config', $result);
+    }
+
+    public function test_get_server_status_not_running()
+    {
+        // Mock Redis for active tokens (empty)
+        $mockRedis = Mockery::mock();
+        $mockRedis->shouldReceive('keys')
+            ->with('ws_terminal_token_*')
+            ->andReturn([]);
+
+        Cache::shouldReceive('getRedis')
+            ->andReturn($mockRedis);
+
+        // Create a partial mock to simulate server not running
+        $service = Mockery::mock(WebSocketTerminalService::class)->makePartial();
+        $service->shouldReceive('getServerStatus')
+            ->andReturn([
+                'success' => true,
+                'status' => 'stopped',
+                'message' => 'WebSocket terminal server is not responding: Connection refused (111)',
+                'websocket_url' => 'ws://localhost:3001',
+                'active_tokens' => 0,
+                'server_config' => [
+                    'host' => 'localhost',
+                    'port' => 3001,
+                    'token_ttl' => 3600
+                ]
+            ]);
+
+        $result = $service->getServerStatus();
+
+        $this->assertTrue($result['success']);
+        $this->assertEquals('stopped', $result['status']);
+        $this->assertStringContainsString('not responding', $result['message']);
+        $this->assertEquals(0, $result['active_tokens']);
+    }
+
+    public function test_start_server_no_path_configured()
+    {
+        Config::set('server-manager.websocket.server_path', null);
+
+        $result = $this->webSocketTerminalService->startServer();
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('server path not configured', $result['message']);
+    }
+    
+    public function test_start_server_already_running()
+    {
+        // Create temporary server file
+        $tempServerPath = tempnam(sys_get_temp_dir(), 'test_server') . '.js';
+        file_put_contents($tempServerPath, 'console.log("test server");');
+        
+        Config::set('server-manager.websocket.server_path', $tempServerPath);
+        
+        // Create a partial mock to simulate server already running
+        $service = Mockery::mock(WebSocketTerminalService::class)->makePartial();
+        $service->shouldReceive('getServerStatus')
+            ->once()
+            ->andReturn([
+                'status' => 'running',
+                'websocket_url' => 'ws://localhost:3001'
+            ]);
+            
+        $result = $service->startServer();
+
+        $this->assertTrue($result['success']);
+        $this->assertStringContainsString('already running', $result['message']);
+        $this->assertEquals('ws://localhost:3001', $result['websocket_url']);
+        
+        // Clean up
+        unlink($tempServerPath);
+    }
+    
+    public function test_start_server_file_not_exists()
+    {
+        Config::set('server-manager.websocket.server_path', '/nonexistent/server.js');
+
+        $result = $this->webSocketTerminalService->startServer();
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('not found', $result['message']);
+    }
+
+    public function test_stop_server()
+    {
+        Config::set('server-manager.websocket.port', 3001);
+        Log::shouldReceive('info')->once();
+
+        $result = $this->webSocketTerminalService->stopServer();
+
+        $this->assertTrue($result['success']);
+        $this->assertStringContainsString('stop command executed', $result['message']);
+    }
+    
+    public function test_stop_server_error_handling()
+    {
+        Config::set('server-manager.websocket.port', 3001);
+        
+        // Create a partial mock to simulate exception during stop
+        $service = Mockery::mock(WebSocketTerminalService::class)->makePartial();
+        $service->shouldReceive('stopServer')
+            ->andReturn([
+                'success' => false,
+                'message' => 'Failed to stop WebSocket server: Command failed'
+            ]);
+            
+        $result = $service->stopServer();
+
+        $this->assertFalse($result['success']);
+        $this->assertStringContainsString('Failed to stop WebSocket server', $result['message']);
+    }
+
+    public function test_get_websocket_url()
+    {
+        // Test default configuration
+        $reflection = new \ReflectionClass($this->webSocketTerminalService);
+        $method = $reflection->getMethod('getWebSocketUrl');
+        $method->setAccessible(true);
+
+        $url = $method->invoke($this->webSocketTerminalService);
+
+        $this->assertEquals('ws://localhost:3001', $url);
+    }
+
+    public function test_get_websocket_url_with_ssl()
+    {
+        Config::set('server-manager.websocket.ssl', true);
+
+        $reflection = new \ReflectionClass($this->webSocketTerminalService);
+        $method = $reflection->getMethod('getWebSocketUrl');
+        $method->setAccessible(true);
+
+        $url = $method->invoke($this->webSocketTerminalService);
+
+        $this->assertEquals('wss://localhost:3001', $url);
+    }
+    
+    public function test_get_websocket_url_custom_host_port()
+    {
+        Config::set('server-manager.websocket.host', 'example.com');
+        Config::set('server-manager.websocket.port', 8080);
+        Config::set('server-manager.websocket.ssl', false);
+
+        $reflection = new \ReflectionClass($this->webSocketTerminalService);
+        $method = $reflection->getMethod('getWebSocketUrl');
+        $method->setAccessible(true);
+
+        $url = $method->invoke($this->webSocketTerminalService);
+
+        $this->assertEquals('ws://example.com:8080', $url);
+    }
+
+    public function test_token_expiration_validation()
+    {
+        // Test token with very short TTL
+        Config::set('server-manager.websocket.token_ttl', 1); // 1 second
+        
+        $shortTtlService = new WebSocketTerminalService();
+        
+        Cache::shouldReceive('put')->once()->andReturn(true);
+        Log::shouldReceive('info')->once();
+
+        $result = $shortTtlService->generateToken($this->testServer);
+        
+        $this->assertTrue($result['success']);
+        
+        // Verify expiration time is properly set
+        $decoded = JWT::decode($result['token'], new Key('test-secret-key-for-testing', 'HS256'));
+        $this->assertLessThanOrEqual(time() + 2, $decoded->exp); // Should expire within 2 seconds
+        $this->assertGreaterThan(time(), $decoded->exp); // But still in future
+    }
+    
+    public function test_token_cache_storage_structure()
+    {
+        $expectedCacheData = [
+            'server_id' => $this->testServer->id,
+            'created_at' => Mockery::type(Carbon::class),
+            'used' => false,
+            'websocket_url' => 'ws://localhost:3001'
+        ];
+        
+        Cache::shouldReceive('put')
+            ->with(
+                Mockery::pattern('/^ws_terminal_token_ws_[a-f0-9.]+$/'),
+                Mockery::subset($expectedCacheData),
+                Mockery::type(Carbon::class)
+            )
+            ->once()
+            ->andReturn(true);
+            
+        Log::shouldReceive('info')->once();
+
+        $result = $this->webSocketTerminalService->generateToken($this->testServer);
+        
+        $this->assertTrue($result['success']);
+    }
+    
+    public function test_service_constructor_with_default_config()
+    {
+        // Test with minimal config (should use defaults)
+        Config::set('server-manager.websocket.jwt_secret', '');
+        Config::set('server-manager.websocket.token_ttl', null);
+        Config::set('app.key', 'fallback-app-key');
+        
+        $service = new WebSocketTerminalService();
+        
+        $this->assertInstanceOf(WebSocketTerminalService::class, $service);
+        
+        // Verify it uses app.key as fallback and default TTL
+        $reflection = new \ReflectionClass($service);
+        $secretProperty = $reflection->getProperty('jwtSecret');
+        $secretProperty->setAccessible(true);
+        $ttlProperty = $reflection->getProperty('tokenTtl');
+        $ttlProperty->setAccessible(true);
+        
+        $this->assertEquals('fallback-app-key', $secretProperty->getValue($service));
+        $this->assertEquals(3600, $ttlProperty->getValue($service)); // Default 1 hour
+    }
+}

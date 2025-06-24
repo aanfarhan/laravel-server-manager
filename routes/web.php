@@ -36,13 +36,14 @@ Route::prefix('server-manager')->name('server-manager.')->middleware('web')->gro
     Route::post('/terminal/cleanup', [TerminalController::class, 'cleanup'])->name('terminal.cleanup');
     Route::post('/terminal/bulk', [TerminalController::class, 'bulk'])->name('terminal.bulk');
     
-    // Wetty Terminal Routes
-    Route::post('/terminal/wetty/start', [TerminalController::class, 'startWetty'])->name('terminal.wetty.start');
-    Route::post('/terminal/wetty/stop', [TerminalController::class, 'stopWetty'])->name('terminal.wetty.stop');
-    Route::get('/terminal/wetty/info', [TerminalController::class, 'wettyInfo'])->name('terminal.wetty.info');
-    Route::get('/terminal/wetty/instances', [TerminalController::class, 'wettyInstances'])->name('terminal.wetty.instances');
-    Route::post('/terminal/wetty/cleanup', [TerminalController::class, 'wettyCleanup'])->name('terminal.wetty.cleanup');
-    Route::get('/terminal/wetty/status', [TerminalController::class, 'wettyStatus'])->name('terminal.wetty.status');
+    // WebSocket Terminal Routes
+    Route::post('/terminal/websocket/token', [TerminalController::class, 'generateWebSocketToken'])->name('terminal.websocket.token');
+    Route::post('/terminal/websocket/revoke', [TerminalController::class, 'revokeWebSocketToken'])->name('terminal.websocket.revoke');
+    Route::get('/terminal/websocket/status', [TerminalController::class, 'webSocketStatus'])->name('terminal.websocket.status');
+    Route::get('/terminal/websocket/tokens', [TerminalController::class, 'listWebSocketTokens'])->name('terminal.websocket.tokens');
+    Route::post('/terminal/websocket/cleanup', [TerminalController::class, 'cleanupWebSocketTokens'])->name('terminal.websocket.cleanup');
+    Route::post('/terminal/websocket/start-server', [TerminalController::class, 'startWebSocketServer'])->name('terminal.websocket.start');
+    Route::post('/terminal/websocket/stop-server', [TerminalController::class, 'stopWebSocketServer'])->name('terminal.websocket.stop');
     
     // Log Management Routes
     Route::get('/logs', [LogController::class, 'index'])->name('logs.index');
