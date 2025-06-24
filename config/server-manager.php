@@ -25,13 +25,9 @@ return [
     |
     */
     'terminal' => [
-        'session_timeout' => 3600, // 1 hour in seconds
-        'max_sessions_per_server' => 5,
-        'output_buffer_size' => 8192,
         'default_rows' => 24,
         'default_cols' => 80,
-        'polling_interval' => 500, // milliseconds
-        'default_mode' => 'simple', // simple or websocket
+        'default_mode' => 'websocket', // Only websocket mode supported
     ],
 
     /*
@@ -53,6 +49,7 @@ return [
         'max_connections' => env('WEBSOCKET_TERMINAL_MAX_CONNECTIONS', 100),
         'connection_timeout' => env('WEBSOCKET_TERMINAL_CONNECTION_TIMEOUT', 300000), // 5 minutes
     ],
+
 
     /*
     |--------------------------------------------------------------------------

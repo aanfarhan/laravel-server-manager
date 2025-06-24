@@ -52,6 +52,7 @@
         window.getDefaultHeaders = function() {
             return {
                 'Content-Type': 'application/json',
+                'Accept': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest',
                 'X-CSRF-TOKEN': window.getCsrfToken()
             };

@@ -201,10 +201,28 @@ function serverForm() {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        'Accept': 'application/json',
                         'X-CSRF-TOKEN': window.getCsrfToken()
                     },
                     body: JSON.stringify(this.form)
                 });
+                
+                if (!response.ok) {
+                    // Handle HTTP error responses
+                    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                    try {
+                        const errorData = await response.json();
+                        if (errorData.message) {
+                            errorMessage = errorData.message;
+                        }
+                    } catch (jsonError) {
+                        // Response is not JSON, might be HTML error page
+                        const htmlText = await response.text();
+                        console.error('Non-JSON error response:', htmlText);
+                    }
+                    alert('❌ Connection test failed: ' + errorMessage);
+                    return;
+                }
                 
                 const result = await response.json();
                 if (result.success) {
@@ -213,6 +231,7 @@ function serverForm() {
                     alert('❌ Connection test failed: ' + result.message);
                 }
             } catch (error) {
+                console.error('Connection test error:', error);
                 alert('❌ Connection test failed: ' + error.message);
             }
             this.loading = false;

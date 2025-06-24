@@ -448,37 +448,25 @@
                         Terminal Session
                     </h3>
                     <div class="flex space-x-2">
-                        <!-- Terminal Mode Selector -->
-                        <div class="flex items-center space-x-2 mr-4">
-                            <span class="text-sm text-gray-600 dark:text-gray-400">Mode:</span>
-                            <select x-model="terminalMode" 
-                                    :disabled="terminalLoading || terminalSession || websocketSession"
-                                    class="text-sm border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
-                                <option value="simple">Simple</option>
-                                <option value="websocket">Full (WebSocket)</option>
-                            </select>
-                        </div>
-                        
                         <button @click="createTerminalSession()" 
-                                :disabled="terminalLoading || terminalSession || websocketSession"
+                                :disabled="terminalLoading || websocketSession"
                                 class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50">
                             <i class="fas fa-play mr-1"></i>
-                            <span x-text="terminalMode === 'websocket' ? 'Start WebSocket Terminal' : 'Start Simple Terminal'"></span>
+                            Start WebSocket Terminal
                         </button>
                         <button @click="closeTerminalSession()" 
-                                x-show="terminalSession || websocketSession"
+                                x-show="websocketSession"
                                 class="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
                             <i class="fas fa-stop mr-1"></i>
-                            <span x-text="websocketSession ? 'Close WebSocket Terminal' : 'Close Terminal'"></span>
+                            Close WebSocket Terminal
                         </button>
                         <button @click="clearTerminal()" 
-                                x-show="terminalSession || websocketSession"
+                                x-show="websocketSession"
                                 class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">
                             <i class="fas fa-eraser mr-1"></i>
                             Clear
                         </button>
                         <button @click="checkWebSocketStatus()" 
-                                x-show="terminalMode === 'websocket'"
                                 class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">
                             <i class="fas fa-info-circle mr-1"></i>
                             Check Server Status
@@ -487,7 +475,7 @@
                 </div>
 
                 <!-- Terminal Container -->
-                <div x-show="terminalSession || websocketSession" class="space-y-4">
+                <div x-show="websocketSession" class="space-y-4">
                     <div class="bg-black rounded-lg border border-gray-300 dark:border-gray-600">
                         <!-- Terminal Header -->
                         <div class="flex items-center justify-between px-4 py-2 bg-gray-100 dark:bg-gray-800 rounded-t-lg border-b border-gray-300 dark:border-gray-600">
@@ -495,15 +483,14 @@
                                 <div class="w-3 h-3 bg-red-500 rounded-full"></div>
                                 <div class="w-3 h-3 bg-yellow-500 rounded-full"></div>
                                 <div class="w-3 h-3 bg-green-500 rounded-full"></div>
-                                <span class="ml-4 text-sm text-gray-600 dark:text-gray-400 font-mono" 
-                                      x-text="websocketSession ? '{{ $server->name }} - WebSocket Terminal' : '{{ $server->name }} - Simple Terminal'"></span>
+                                <span class="ml-4 text-sm text-gray-600 dark:text-gray-400 font-mono">{{ $server->name }} - WebSocket Terminal</span>
                             </div>
                             <div class="flex items-center space-x-2 text-sm text-gray-500 dark:text-gray-400">
-                                <span x-show="terminalConnected || websocketConnected" class="flex items-center">
+                                <span x-show="websocketConnected" class="flex items-center">
                                     <i class="fas fa-circle text-green-500 mr-1"></i>
-                                    <span x-text="websocketSession ? 'WebSocket Connected' : 'Connected'"></span>
+                                    WebSocket Connected
                                 </span>
-                                <span x-show="!terminalConnected && !websocketConnected" class="flex items-center">
+                                <span x-show="!websocketConnected" class="flex items-center">
                                     <i class="fas fa-circle text-red-500 mr-1"></i>
                                     Disconnected
                                 </span>
@@ -511,7 +498,7 @@
                         </div>
                         
                         <!-- WebSocket Terminal (xterm.js) -->
-                        <div x-show="websocketSession" class="h-96 relative">
+                        <div class="h-96 relative">
                             <div id="websocket-terminal-container" class="w-full h-full"></div>
                             <div x-show="!websocketConnected" class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75">
                                 <div class="text-white text-center">
@@ -520,45 +507,23 @@
                                 </div>
                             </div>
                         </div>
-                        
-                        <!-- Simple Command Interface -->
-                        <div x-show="terminalSession && !websocketSession" class="p-4">
-                            <div class="bg-black text-green-400 font-mono text-sm p-4 rounded h-80 overflow-y-auto" 
-                                 id="command-output">
-                                <div x-html="commandHistory"></div>
-                                <div class="flex items-center">
-                                    <span x-text="currentPrompt"></span>
-                                    <input type="text" 
-                                           x-model="currentCommand"
-                                           @keyup.enter="executeSimpleCommand()"
-                                           class="bg-transparent border-0 outline-0 text-green-400 flex-1 ml-1"
-                                           placeholder="Type command...">
-                                </div>
-                            </div>
-                            
-                            <div class="mt-2 text-xs text-gray-500">
-                                <span class="inline-flex items-center">
-                                    <i class="fas fa-info-circle mr-1"></i>
-                                    Simple terminal mode - each command executes independently
-                                </span>
-                            </div>
-                        </div>
                     </div>
                 </div>
 
                 <!-- Terminal Status/Help -->
-                <div x-show="!terminalSession && !websocketSession" class="text-center py-8">
+                <div x-show="!websocketSession" class="text-center py-8">
                     <div class="mx-auto w-24 h-24 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
                         <i class="fas fa-terminal text-3xl text-gray-400"></i>
                     </div>
                     <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">No Active Terminal Session</h3>
-                    <p class="text-gray-500 dark:text-gray-400 mb-4">Click "Start Terminal" to open a new interactive terminal session on {{ $server->name }}</p>
+                    <p class="text-gray-500 dark:text-gray-400 mb-4">Click "Start WebSocket Terminal" to open a new interactive terminal session on {{ $server->name }}</p>
                     <div class="text-sm text-gray-400 dark:text-gray-500">
-                        <p>Features:</p>
+                        <p>WebSocket Terminal Features:</p>
                         <ul class="list-disc list-inside mt-1 space-y-1">
                             <li>Full interactive terminal with copy/paste support</li>
-                            <li>Real-time command execution</li>
+                            <li>Real-time command execution and output</li>
                             <li>Resizable terminal window</li>
+                            <li>Complete terminal emulation with xterm.js</li>
                             <li>Session persistence until manually closed</li>
                         </ul>
                     </div>
@@ -588,27 +553,15 @@ function serverDetails() {
         autoRefresh: false,
         refreshInterval: null,
         
-        // Terminal functionality
-        terminalSession: null,
+        // WebSocket Terminal functionality
         terminalLoading: false,
-        terminalConnected: false,
-        terminalCommand: '',
-        xtermLoaded: false,
-        terminal: null,
-        outputPollingInterval: null,
-        pollAttempts: 0,
-        
-        // Terminal modes
-        terminalMode: 'simple',
         websocketSession: null,
         websocketUrl: '',
         websocketToken: '',
         websocketConnected: false,
         websocketStatus: null,
         websocketTerminal: null,
-        commandHistory: '',
-        currentCommand: '',
-        currentPrompt: 'user@server:~$ ',
+        websocket: null,
         
         // Notification system
         notification: {
@@ -626,6 +579,23 @@ function serverDetails() {
                     body: JSON.stringify({ server_id: {{ $server->id }} })
                 });
                 
+                if (!response.ok) {
+                    // Handle HTTP error responses
+                    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                    try {
+                        const errorData = await response.json();
+                        if (errorData.message) {
+                            errorMessage = errorData.message;
+                        }
+                    } catch (jsonError) {
+                        // Response is not JSON, might be HTML error page
+                        const htmlText = await response.text();
+                        console.error('Non-JSON error response:', htmlText);
+                    }
+                    alert('❌ Connection test failed: ' + errorMessage);
+                    return;
+                }
+                
                 const result = await response.json();
                 if (result.success) {
                     alert('✅ Connection test successful!');
@@ -633,6 +603,7 @@ function serverDetails() {
                     alert('❌ Connection test failed: ' + result.message);
                 }
             } catch (error) {
+                console.error('Connection test error:', error);
                 alert('❌ Connection test failed: ' + error.message);
             }
             this.loading = false;
@@ -898,54 +869,17 @@ function serverDetails() {
             }
         },
 
-        // Terminal functionality
+        // WebSocket Terminal functionality
         async createTerminalSession() {
-            if (this.terminalSession || this.websocketSession) return;
+            if (this.websocketSession) return;
             
             this.terminalLoading = true;
             try {
-                if (this.terminalMode === 'websocket') {
-                    await this.createWebSocketSession();
-                } else {
-                    await this.createSimpleSession();
-                }
+                await this.createWebSocketSession();
             } catch (error) {
                 this.showNotification('❌ Failed to start terminal: ' + error.message, 'error');
             }
             this.terminalLoading = false;
-        },
-        
-        async createSimpleSession() {
-            const response = await fetch('{{ route("server-manager.terminal.create") }}', {
-                method: 'POST',
-                headers: window.getDefaultHeaders(),
-                body: JSON.stringify({ 
-                    server_id: {{ $server->id }},
-                    mode: 'simple'
-                })
-            });
-            
-            const result = await response.json();
-            if (result.success) {
-                this.terminalSession = result.session_id;
-                this.terminalConnected = true;
-                
-                // Wait for DOM to update
-                await this.$nextTick();
-                await new Promise(resolve => setTimeout(resolve, 100));
-                
-                await this.initializeTerminal();
-                
-                this.currentPrompt = `{{ $server->username ?? 'user' }}@{{ $server->name }}:~$ `;
-                this.commandHistory = `<div class="text-blue-400">Welcome to {{ $server->name }}</div><div class="text-gray-400 text-xs">Simple terminal mode - Type commands and press Enter</div>`;
-                
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                this.startOutputPolling();
-                
-                this.showNotification('✅ Simple terminal started!', 'success');
-            } else {
-                this.showNotification('❌ Failed to start terminal: ' + result.message, 'error');
-            }
         },
         
         async createWebSocketSession() {
@@ -980,28 +914,7 @@ function serverDetails() {
         async closeTerminalSession() {
             if (this.websocketSession) {
                 await this.closeWebSocketSession();
-            } else if (this.terminalSession) {
-                await this.closeSimpleSession();
             }
-        },
-        
-        async closeSimpleSession() {
-            try {
-                await fetch('{{ route("server-manager.terminal.close") }}', {
-                    method: 'POST',
-                    headers: window.getDefaultHeaders(),
-                    body: JSON.stringify({ session_id: this.terminalSession })
-                });
-            } catch (error) {
-                console.error('Error closing terminal:', error);
-            }
-            
-            // Clean up
-            this.stopOutputPolling();
-            this.destroyTerminal();
-            this.terminalSession = null;
-            this.terminalConnected = false;
-            this.pollAttempts = 0;
         },
         
         async closeWebSocketSession() {
@@ -1040,184 +953,10 @@ function serverDetails() {
             this.websocket = null;
         },
 
-        async executeCommand() {
-            if (!this.terminalSession || !this.terminalCommand.trim()) return;
-            
-            try {
-                const response = await fetch('{{ route("server-manager.terminal.execute") }}', {
-                    method: 'POST',
-                    headers: window.getDefaultHeaders(),
-                    body: JSON.stringify({ 
-                        session_id: this.terminalSession,
-                        command: this.terminalCommand
-                    })
-                });
-                
-                const result = await response.json();
-                if (result.success && this.terminal) {
-                    this.terminal.write(result.output);
-                }
-                
-                this.terminalCommand = '';
-            } catch (error) {
-                console.error('Command execution failed:', error);
-            }
-        },
 
-        async initializeTerminal() {
-            return new Promise((resolve) => {
-                // Load xterm.js if not already loaded
-                if (typeof Terminal === 'undefined') {
-                    const script = document.createElement('script');
-                    script.src = 'https://unpkg.com/xterm@5.3.0/lib/xterm.js';
-                    script.onload = () => {
-                        const css = document.createElement('link');
-                        css.rel = 'stylesheet';
-                        css.href = 'https://unpkg.com/xterm@5.3.0/css/xterm.css';
-                        document.head.appendChild(css);
-                        
-                        this.createTerminalInstance();
-                        resolve();
-                    };
-                    document.head.appendChild(script);
-                } else {
-                    this.createTerminalInstance();
-                    resolve();
-                }
-            });
-        },
 
-        createTerminalInstance() {
-            const container = document.getElementById('terminal-container');
-            if (!container) {
-                console.error('Terminal container not found');
-                return;
-            }
-            
-            // Check if container is visible
-            if (container.offsetParent === null) {
-                console.error('Terminal container is not visible');
-                return;
-            }
-            
-            // Clear container
-            container.innerHTML = '';
-            
-            // Create terminal
-            this.terminal = new Terminal({
-                cursorBlink: true,
-                fontSize: 14,
-                fontFamily: 'Consolas, Monaco, "Lucida Console", monospace',
-                theme: {
-                    background: '#000000',
-                    foreground: '#ffffff',
-                    cursor: '#ffffff',
-                    selection: '#ffffff'
-                },
-                rows: 24,
-                cols: 80
-            });
-            
-            // Handle terminal input
-            this.terminal.onData((data) => {
-                if (this.terminalSession) {
-                    this.sendTerminalInput(data);
-                }
-            });
-            
-            // Mount terminal
-            this.terminal.open(container);
-            this.xtermLoaded = true;
-        },
 
-        async sendTerminalInput(data) {
-            if (!this.terminalSession) return;
-            
-            try {
-                const response = await fetch('{{ route("server-manager.terminal.input") }}', {
-                    method: 'POST',
-                    headers: window.getDefaultHeaders(),
-                    body: JSON.stringify({ 
-                        session_id: this.terminalSession,
-                        input: data
-                    })
-                });
-                
-                const result = await response.json();
-                if (result.success && result.output && this.terminal) {
-                    this.terminal.write(result.output);
-                }
-            } catch (error) {
-                console.error('Terminal input failed:', error);
-            }
-        },
 
-        startOutputPolling() {
-            if (this.outputPollingInterval) {
-                clearInterval(this.outputPollingInterval);
-            }
-            
-            this.pollAttempts = 0; // Reset poll attempts counter
-            const maxGraceAttempts = 10; // Grace period: 10 attempts (5 seconds)
-            
-            this.outputPollingInterval = setInterval(async () => {
-                if (!this.terminalSession) return;
-                
-                try {
-                    const response = await fetch('{{ route("server-manager.terminal.output") }}?' + 
-                        new URLSearchParams({ session_id: this.terminalSession }));
-                    
-                    const result = await response.json();
-                    if (result.success && result.output && this.terminal) {
-                        this.terminal.write(result.output);
-                    }
-                    
-                    // Only auto-close if session is inactive AND we're past the grace period
-                    if (!result.session_active && this.pollAttempts >= maxGraceAttempts) {
-                        console.log('Terminal session became inactive after grace period, closing...');
-                        this.closeTerminalSession();
-                    } else if (!result.session_active) {
-                        console.log(`Terminal session not yet active, attempt ${this.pollAttempts + 1}/${maxGraceAttempts}`);
-                    }
-                    
-                    this.pollAttempts++;
-                } catch (error) {
-                    console.error('Output polling failed:', error);
-                    // Don't auto-close on network errors during grace period
-                    if (this.pollAttempts >= maxGraceAttempts) {
-                        console.log('Terminal polling failed consistently, closing session...');
-                        this.closeTerminalSession();
-                    }
-                    this.pollAttempts++;
-                }
-            }, 2000); // Poll every 2 seconds (less aggressive since we have interactive input)
-        },
-
-        stopOutputPolling() {
-            if (this.outputPollingInterval) {
-                clearInterval(this.outputPollingInterval);
-                this.outputPollingInterval = null;
-            }
-        },
-
-        clearTerminal() {
-            if (this.terminal) {
-                this.terminal.clear();
-            }
-        },
-
-        destroyTerminal() {
-            if (this.terminal) {
-                this.terminal.dispose();
-                this.terminal = null;
-            }
-            this.xtermLoaded = false;
-            
-            const container = document.getElementById('terminal-container');
-            if (container) {
-                container.innerHTML = '';
-            }
-        },
 
         showNotification(message, type = 'success') {
             this.notification.message = message;
@@ -1234,45 +973,12 @@ function serverDetails() {
             this.notification.show = false;
         },
 
-        async executeSimpleCommand() {
-            if (!this.terminalSession || !this.currentCommand.trim()) return;
-            
-            const command = this.currentCommand.trim();
-            this.currentCommand = '';
-            
-            // Add command to history
-            this.commandHistory += `<div>${this.currentPrompt}${command}</div>`;
-            
-            try {
-                const response = await fetch('{{ route("server-manager.terminal.execute") }}', {
-                    method: 'POST',
-                    headers: window.getDefaultHeaders(),
-                    body: JSON.stringify({ 
-                        session_id: this.terminalSession,
-                        command: command
-                    })
-                });
-                
-                const result = await response.json();
-                if (result.success) {
-                    // Add output to history
-                    const output = result.output || '';
-                    this.commandHistory += `<div class="whitespace-pre-wrap">${this.escapeHtml(output)}</div>`;
-                } else {
-                    this.commandHistory += `<div class="text-red-400">Error: ${result.message || 'Command failed'}</div>`;
-                }
-            } catch (error) {
-                this.commandHistory += `<div class="text-red-400">Error: ${error.message}</div>`;
+        clearTerminal() {
+            if (this.websocketTerminal) {
+                this.websocketTerminal.clear();
             }
-            
-            // Scroll to bottom
-            this.$nextTick(() => {
-                const output = document.getElementById('command-output');
-                if (output) {
-                    output.scrollTop = output.scrollHeight;
-                }
-            });
         },
+
 
         async initializeWebSocketTerminal() {
             return new Promise((resolve, reject) => {

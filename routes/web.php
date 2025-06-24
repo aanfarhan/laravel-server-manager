@@ -24,17 +24,8 @@ Route::prefix('server-manager')->name('server-manager.')->middleware('web')->gro
     Route::put('/servers/{server}', [ServerController::class, 'update'])->name('servers.update');
     Route::delete('/servers/{server}', [ServerController::class, 'destroy'])->name('servers.destroy');
     
-    // Terminal Session Routes
+    // Terminal Session Routes (WebSocket only)
     Route::post('/terminal/create', [TerminalController::class, 'create'])->name('terminal.create');
-    Route::post('/terminal/execute', [TerminalController::class, 'execute'])->name('terminal.execute');
-    Route::post('/terminal/input', [TerminalController::class, 'input'])->name('terminal.input');
-    Route::get('/terminal/output', [TerminalController::class, 'output'])->name('terminal.output');
-    Route::post('/terminal/resize', [TerminalController::class, 'resize'])->name('terminal.resize');
-    Route::post('/terminal/close', [TerminalController::class, 'close'])->name('terminal.close');
-    Route::get('/terminal/info', [TerminalController::class, 'info'])->name('terminal.info');
-    Route::get('/terminal/sessions', [TerminalController::class, 'sessions'])->name('terminal.sessions');
-    Route::post('/terminal/cleanup', [TerminalController::class, 'cleanup'])->name('terminal.cleanup');
-    Route::post('/terminal/bulk', [TerminalController::class, 'bulk'])->name('terminal.bulk');
     
     // WebSocket Terminal Routes
     Route::post('/terminal/websocket/token', [TerminalController::class, 'generateWebSocketToken'])->name('terminal.websocket.token');

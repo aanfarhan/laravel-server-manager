@@ -5,7 +5,7 @@ namespace ServerManager\LaravelServerManager\Tests\Unit;
 use ServerManager\LaravelServerManager\Tests\TestCase;
 use ServerManager\LaravelServerManager\ServerManagerServiceProvider;
 use ServerManager\LaravelServerManager\Services\SshService;
-use ServerManager\LaravelServerManager\Services\TerminalService;
+use ServerManager\LaravelServerManager\Services\WebSocketTerminalService;
 use ServerManager\LaravelServerManager\Services\MonitoringService;
 use ServerManager\LaravelServerManager\Services\LogService;
 
@@ -14,7 +14,7 @@ class ServiceProviderTest extends TestCase
     public function test_service_provider_registers_services()
     {
         $this->assertInstanceOf(SshService::class, $this->app->make(SshService::class));
-        $this->assertInstanceOf(TerminalService::class, $this->app->make(TerminalService::class));
+        $this->assertInstanceOf(WebSocketTerminalService::class, $this->app->make(WebSocketTerminalService::class));
         $this->assertInstanceOf(MonitoringService::class, $this->app->make(MonitoringService::class));
         $this->assertInstanceOf(LogService::class, $this->app->make(LogService::class));
     }
@@ -26,10 +26,10 @@ class ServiceProviderTest extends TestCase
         
         $this->assertSame($sshService1, $sshService2);
 
-        $terminalService1 = $this->app->make(TerminalService::class);
-        $terminalService2 = $this->app->make(TerminalService::class);
+        $webSocketTerminalService1 = $this->app->make(WebSocketTerminalService::class);
+        $webSocketTerminalService2 = $this->app->make(WebSocketTerminalService::class);
         
-        $this->assertSame($terminalService1, $terminalService2);
+        $this->assertSame($webSocketTerminalService1, $webSocketTerminalService2);
 
         $monitoringService1 = $this->app->make(MonitoringService::class);
         $monitoringService2 = $this->app->make(MonitoringService::class);
@@ -56,7 +56,7 @@ class ServiceProviderTest extends TestCase
         $this->assertTrue(\Route::has('server-manager.servers.index'));
         $this->assertTrue(\Route::has('server-manager.servers.connect'));
         $this->assertTrue(\Route::has('server-manager.terminal.create'));
-        $this->assertTrue(\Route::has('server-manager.terminal.execute'));
+        $this->assertTrue(\Route::has('server-manager.terminal.websocket.token'));
         $this->assertTrue(\Route::has('server-manager.logs.index'));
         $this->assertTrue(\Route::has('server-manager.logs.read'));
     }
@@ -69,17 +69,18 @@ class ServiceProviderTest extends TestCase
         $this->assertFalse($provider->isDeferred());
     }
 
-    public function test_terminal_service_has_ssh_dependency()
+    public function test_websocket_terminal_service_constructor()
     {
-        $terminalService = $this->app->make(TerminalService::class);
+        $webSocketTerminalService = $this->app->make(WebSocketTerminalService::class);
         
-        // Use reflection to check if SshService is injected
-        $reflection = new \ReflectionClass($terminalService);
+        // Use reflection to check constructor
+        $reflection = new \ReflectionClass($webSocketTerminalService);
         $constructor = $reflection->getConstructor();
         $parameters = $constructor->getParameters();
         
-        $this->assertCount(1, $parameters);
-        $this->assertEquals(SshService::class, $parameters[0]->getType()->getName());
+        // WebSocketTerminalService constructor takes no parameters
+        $this->assertCount(0, $parameters);
+        $this->assertInstanceOf(WebSocketTerminalService::class, $webSocketTerminalService);
     }
 
     public function test_monitoring_service_has_ssh_dependency()

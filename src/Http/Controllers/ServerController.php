@@ -185,20 +185,44 @@ class ServerController extends Controller
 
     public function testConnection(Request $request)
     {
-        $request->validate([
-            'server_id' => 'required|exists:servers,id'
-        ]);
-
         try {
-            $server = Server::findOrFail($request->server_id);
-            $config = $server->getSshConfig();
+            // Handle both existing server test and new credentials test
+            if ($request->has('server_id')) {
+                // Test existing server
+                $request->validate([
+                    'server_id' => 'required|exists:servers,id'
+                ]);
+
+                $server = Server::findOrFail($request->server_id);
+                $config = $server->getSshConfig();
+            } else {
+                // Test new credentials
+                $request->validate([
+                    'name' => 'required|string',
+                    'host' => 'required|string',
+                    'port' => 'required|integer|min:1|max:65535',
+                    'username' => 'required|string',
+                    'auth_type' => 'required|in:password,key',
+                    'password' => 'required_if:auth_type,password|string',
+                    'private_key' => 'required_if:auth_type,key|string'
+                ]);
+
+                $config = [
+                    'host' => $request->host,
+                    'port' => $request->port,
+                    'username' => $request->username,
+                    'auth_type' => $request->auth_type,
+                    'password' => $request->auth_type === 'password' ? $request->password : null,
+                    'private_key' => $request->auth_type === 'key' ? $request->private_key : null,
+                    'private_key_password' => $request->private_key_password
+                ];
+            }
 
             $result = $this->sshService->testConnection($config);
 
             return response()->json([
                 'success' => $result,
-                'message' => $result ? 'Connection test successful' : 'Connection test failed',
-                'server' => $server
+                'message' => $result ? 'Connection test successful' : 'Connection test failed'
             ]);
 
         } catch (\Exception $e) {
