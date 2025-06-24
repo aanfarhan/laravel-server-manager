@@ -44,7 +44,7 @@ class WebSocketTerminalService
             if ($server->private_key_path && file_exists($server->private_key_path)) {
                 $payload['privateKey'] = file_get_contents($server->private_key_path);
             } elseif ($server->password) {
-                $payload['password'] = decrypt($server->password);
+                $payload['password'] = $server->password; // Already decrypted by model accessor
             } else {
                 throw new \Exception('No authentication method available for server');
             }
@@ -171,23 +171,38 @@ class WebSocketTerminalService
     public function getActiveTokens(): array
     {
         try {
-            $pattern = $this->cachePrefix . '*';
-            $keys = Cache::getRedis()->keys($pattern);
             $tokens = [];
-
-            foreach ($keys as $key) {
-                $tokenId = str_replace($this->cachePrefix, '', $key);
-                $tokenInfo = Cache::get($key);
-                
-                if ($tokenInfo) {
-                    $tokens[] = [
-                        'token_id' => $tokenId,
-                        'server_id' => $tokenInfo['server_id'],
-                        'created_at' => $tokenInfo['created_at'],
-                        'used' => $tokenInfo['used'] ?? false,
-                        'used_at' => $tokenInfo['used_at'] ?? null
-                    ];
+            
+            // Try to get keys using Redis if available
+            try {
+                if (Cache::getStore() instanceof \Illuminate\Cache\RedisStore) {
+                    $pattern = $this->cachePrefix . '*';
+                    $keys = Cache::getRedis()->keys($pattern);
+                    
+                    foreach ($keys as $key) {
+                        $tokenId = str_replace($this->cachePrefix, '', $key);
+                        $tokenInfo = Cache::get($key);
+                        
+                        if ($tokenInfo) {
+                            $tokens[] = [
+                                'token_id' => $tokenId,
+                                'server_id' => $tokenInfo['server_id'],
+                                'created_at' => $tokenInfo['created_at'],
+                                'used' => $tokenInfo['used'] ?? false,
+                                'used_at' => $tokenInfo['used_at'] ?? null
+                            ];
+                        }
+                    }
+                } else {
+                    // For non-Redis cache stores, we can't easily list all keys
+                    // This is a limitation, but we'll return an empty array gracefully
+                    Log::info("WebSocket token listing requires Redis cache store");
                 }
+            } catch (\Exception $redisError) {
+                // Redis is not available or configured, return empty list
+                Log::warning("Redis not available for WebSocket token listing", [
+                    'error' => $redisError->getMessage()
+                ]);
             }
 
             return [
@@ -216,24 +231,37 @@ class WebSocketTerminalService
     public function cleanupExpiredTokens(): int
     {
         try {
-            $pattern = $this->cachePrefix . '*';
-            $keys = Cache::getRedis()->keys($pattern);
             $cleanedCount = 0;
+            
+            // Try to cleanup using Redis if available
+            try {
+                if (Cache::getStore() instanceof \Illuminate\Cache\RedisStore) {
+                    $pattern = $this->cachePrefix . '*';
+                    $keys = Cache::getRedis()->keys($pattern);
 
-            foreach ($keys as $key) {
-                $tokenInfo = Cache::get($key);
-                
-                // If token info is null, it means it expired naturally
-                if (!$tokenInfo) {
-                    $cleanedCount++;
-                    continue;
-                }
+                    foreach ($keys as $key) {
+                        $tokenInfo = Cache::get($key);
+                        
+                        // If token info is null, it means it expired naturally
+                        if (!$tokenInfo) {
+                            $cleanedCount++;
+                            continue;
+                        }
 
-                // Check if token was created too long ago (extra safety)
-                if ($tokenInfo['created_at']->addSeconds($this->tokenTtl * 2)->isPast()) {
-                    Cache::forget($key);
-                    $cleanedCount++;
+                        // Check if token was created too long ago (extra safety)
+                        if ($tokenInfo['created_at']->addSeconds($this->tokenTtl * 2)->isPast()) {
+                            Cache::forget($key);
+                            $cleanedCount++;
+                        }
+                    }
+                } else {
+                    // For non-Redis cache stores, expired tokens are automatically cleaned up
+                    Log::info("WebSocket token cleanup relies on cache store expiration for non-Redis stores");
                 }
+            } catch (\Exception $redisError) {
+                Log::warning("Redis not available for WebSocket token cleanup", [
+                    'error' => $redisError->getMessage()
+                ]);
             }
 
             if ($cleanedCount > 0) {
@@ -263,16 +291,25 @@ class WebSocketTerminalService
             $host = parse_url($websocketUrl, PHP_URL_HOST);
             $port = parse_url($websocketUrl, PHP_URL_PORT);
 
-            // Try to connect to WebSocket server
-            $socket = @fsockopen($host, $port, $errno, $errstr, 5);
+            // Try to make HTTP request to check if server is running
+            // WebSocket servers typically respond to HTTP requests before upgrade
+            $httpUrl = 'http://' . $host . ':' . $port;
             
-            if ($socket) {
-                fclose($socket);
+            $context = stream_context_create([
+                'http' => [
+                    'timeout' => 5,
+                    'method' => 'GET'
+                ]
+            ]);
+            
+            $result = @file_get_contents($httpUrl, false, $context);
+            
+            if ($result !== false || $this->checkPortIsOpen($host, $port)) {
                 $status = 'running';
                 $message = 'WebSocket terminal server is running';
             } else {
                 $status = 'stopped';
-                $message = "WebSocket terminal server is not responding: $errstr ($errno)";
+                $message = 'WebSocket terminal server is not responding';
             }
 
             $activeTokens = $this->getActiveTokens();
@@ -299,6 +336,19 @@ class WebSocketTerminalService
                 'active_tokens' => 0
             ];
         }
+    }
+
+    /**
+     * Check if port is open (fallback method)
+     */
+    protected function checkPortIsOpen(string $host, int $port): bool
+    {
+        $socket = @fsockopen($host, $port, $errno, $errstr, 3);
+        if ($socket) {
+            fclose($socket);
+            return true;
+        }
+        return false;
     }
 
     /**
