@@ -14,9 +14,25 @@ A standalone Node.js WebSocket server that provides real-time terminal functiona
 
 ## Installation
 
+### Quick Setup
+```bash
+cd terminal-server
+chmod +x install.sh
+./install.sh          # Linux/macOS
+# OR
+install.bat            # Windows
+```
+
+### Manual Setup
 ```bash
 cd terminal-server
 npm install
+cp .env.example .env
+```
+
+### Verify Installation
+```bash
+npm run check
 ```
 
 ## Configuration
@@ -179,21 +195,76 @@ console.log(stats);
 
 ## Troubleshooting
 
+### "Cannot find module" Error
+This error occurs when Node.js dependencies are not installed. Follow these steps:
+
+1. **Check if node_modules exists:**
+   ```bash
+   ls -la node_modules/
+   ```
+
+2. **Install dependencies:**
+   ```bash
+   npm install
+   # or with verbose output
+   npm install --verbose
+   ```
+
+3. **Clear npm cache if needed:**
+   ```bash
+   npm cache clean --force
+   rm -rf node_modules package-lock.json
+   npm install
+   ```
+
+4. **Check Node.js version:**
+   ```bash
+   node --version  # Should be 16.0.0 or higher
+   npm --version
+   ```
+
+5. **Alternative: Use yarn:**
+   ```bash
+   yarn install
+   ```
+
 ### Connection Issues
 1. Check if server is running: `curl http://localhost:3001`
 2. Verify JWT secret matches Laravel configuration
 3. Check firewall settings
+4. Ensure port 3001 is not in use by another service
 
 ### SSH Connection Failures
 1. Verify SSH credentials in Laravel
-2. Test SSH connection manually
+2. Test SSH connection manually: `ssh user@host`
 3. Check SSH server configuration
+4. Verify private key permissions (600)
 
 ### Performance Issues
 1. Monitor connection count
-2. Adjust timeout settings
-3. Check memory usage
+2. Adjust timeout settings in .env
+3. Check memory usage: `npm run stats`
 4. Review error logs
+
+### Installation Issues
+1. **Permission errors:**
+   ```bash
+   sudo chown -R $(whoami) ~/.npm
+   ```
+
+2. **Missing build tools (Linux):**
+   ```bash
+   sudo apt-get install build-essential
+   ```
+
+3. **Missing build tools (Windows):**
+   ```bash
+   npm install --global windows-build-tools
+   ```
+
+4. **Node.js version conflicts:**
+   - Use nvm to manage Node.js versions
+   - Ensure you're using Node.js 16+
 
 ## Development
 

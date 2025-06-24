@@ -21,9 +21,37 @@ class TerminalServer {
     }
 
     start() {
+        // Create HTTP server first
+        const http = require('http');
+        this.httpServer = http.createServer((req, res) => {
+            if (req.url === '/health' || req.url === '/') {
+                const stats = this.getStats();
+                res.writeHead(200, { 
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                res.end(JSON.stringify({
+                    status: 'ok',
+                    message: 'Terminal WebSocket server is running',
+                    timestamp: new Date().toISOString(),
+                    ...stats
+                }));
+            } else {
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Not Found');
+            }
+        });
+
+        // Create WebSocket server using the HTTP server
         this.server = new WebSocket.Server({ 
-            port: this.port,
+            server: this.httpServer,
             maxPayload: 64 * 1024 // 64KB max message size
+        });
+
+        // Start the HTTP server
+        this.httpServer.listen(this.port, () => {
+            console.log(`HTTP server listening on port ${this.port}`);
+            console.log(`Health check endpoint available at http://localhost:${this.port}/health`);
         });
 
         this.server.on('connection', (ws, req) => {
@@ -54,8 +82,15 @@ class TerminalServer {
 
         if (this.server) {
             this.server.close(() => {
-                console.log('Terminal server shutdown complete');
-                process.exit(0);
+                if (this.httpServer) {
+                    this.httpServer.close(() => {
+                        console.log('Terminal server shutdown complete');
+                        process.exit(0);
+                    });
+                } else {
+                    console.log('Terminal server shutdown complete');
+                    process.exit(0);
+                }
             });
         }
     }
@@ -366,6 +401,7 @@ class TerminalServer {
             console.log(`Cleaned up ${staleConnections.length} stale connections`);
         }
     }
+
 
     setupSignalHandlers() {
         process.on('SIGTERM', () => {
