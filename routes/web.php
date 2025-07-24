@@ -8,7 +8,9 @@ use ServerManager\LaravelServerManager\Http\Controllers\TerminalController;
 Route::prefix('server-manager')->name('server-manager.')->middleware('web')->group(function () {
     
     // Server Management Routes
-    Route::get('/', [ServerController::class, 'index'])->name('index');
+    Route::get('/', function() {
+        return view('server-manager::dashboard');
+    })->name('index');
     Route::get('/servers', [ServerController::class, 'index'])->name('servers.index');
     Route::get('/servers/create', [ServerController::class, 'create'])->name('servers.create');
     Route::get('/servers/list/all', [ServerController::class, 'list'])->name('servers.list');
